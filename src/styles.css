@@ -1,0 +1,158 @@
+/* racing3d —— 深色賽道 UI(收割 golf3d/billiards3d styles 範式) */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body {
+  font-family: "Noto Sans TC", "Microsoft JhengHei", system-ui, sans-serif;
+  background: #0c1322; color: #eef2f8; overflow: hidden;
+  -webkit-user-select: none; user-select: none;
+}
+.app-shell { position: fixed; inset: 0; }
+#gameCanvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+[hidden] { display: none !important; }
+button { font-family: inherit; }
+
+/* 直向提示 */
+.rotate-hint { display: none; }
+@media (orientation: portrait) and (pointer: coarse) {
+  .rotate-hint { position: fixed; inset: 0; z-index: 999; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 18px; background: #15384d; color: #eaf4ff;
+    text-align: center; padding: 24px; font-size: 21px; line-height: 1.7; }
+  .rotate-emoji { font-size: 72px; animation: rotateHint 1.8s ease-in-out infinite; }
+}
+@keyframes rotateHint { 0%, 100% { transform: rotate(-12deg); } 50% { transform: rotate(78deg); } }
+
+/* 左上:圈數/名次(返回大廳鈕在 8px,卡片放 64px 下) */
+.race-card {
+  position: absolute; top: 64px; left: 12px; z-index: 20;
+  padding: 10px 16px; border-radius: 16px;
+  background: rgba(10, 16, 30, 0.78); border: 1px solid rgba(255, 196, 80, 0.4);
+  min-width: 190px;
+}
+.race-line { font-size: 15px; line-height: 1.5; }
+.race-line.big { font-size: 24px; font-weight: 800; color: #ffd24a; }
+.race-line.small { font-size: 12px; opacity: 0.85; font-variant-numeric: tabular-nums; }
+
+/* 右上:小地圖 + 視角名 */
+.mini-wrap { position: absolute; top: 12px; right: 12px; z-index: 20; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+#miniMap { width: 170px; height: 170px; border-radius: 14px; background: rgba(10, 16, 30, 0.7); border: 1px solid rgba(255,255,255,0.18); }
+.view-tag { padding: 4px 12px; border-radius: 999px; background: rgba(10, 16, 30, 0.78); font-size: 13px; border: 1px solid rgba(125, 180, 255, 0.4); }
+
+/* 右下:速度表 + 渦輪 */
+.speed-panel {
+  position: absolute; right: 12px; bottom: 56px; z-index: 20;
+  padding: 10px 16px; border-radius: 16px; text-align: right;
+  background: rgba(10, 16, 30, 0.78); border: 1px solid rgba(255, 255, 255, 0.16);
+}
+.speed-num { font-size: 42px; font-weight: 900; line-height: 1; font-variant-numeric: tabular-nums; }
+.speed-num small { font-size: 13px; margin-left: 6px; opacity: 0.8; font-weight: 600; }
+.turbo-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; justify-content: flex-end; }
+.turbo-label { font-size: 12px; font-weight: 700; color: #ffd24a; }
+.turbo-track { width: 150px; height: 12px; border-radius: 999px; background: rgba(255,255,255,0.14); overflow: hidden; }
+.turbo-fill { width: 100%; height: 100%; transform-origin: left center; transform: scaleX(1);
+  background: linear-gradient(90deg, #ffb347, #ffd24a); border-radius: 999px; transition: background 0.2s; }
+.turbo-row.tired .turbo-fill { background: #6b7280; }
+.turbo-row.boosting .turbo-fill { background: linear-gradient(90deg, #ff6a00, #fff176); }
+.speed-hint { font-size: 11px; opacity: 0.7; margin-top: 6px; }
+@media (pointer: coarse) { .speed-hint { display: none; } .speed-panel { bottom: 140px; } }
+
+/* 中央倒數 / 逆向 */
+.countdown {
+  position: absolute; left: 50%; top: 34%; transform: translate(-50%, -50%);
+  font-size: min(26vw, 170px); font-weight: 900; color: #ffd24a; z-index: 30;
+  text-shadow: 0 6px 30px rgba(0,0,0,0.6); animation: cdPop 0.9s ease-out;
+}
+.countdown.go { color: #7de08c; }
+@keyframes cdPop { 0% { transform: translate(-50%, -50%) scale(1.5); opacity: 0; } 20% { opacity: 1; } 100% { transform: translate(-50%, -50%) scale(1); } }
+.wrong-way {
+  position: absolute; left: 50%; top: 22%; transform: translateX(-50%); z-index: 30;
+  padding: 10px 22px; border-radius: 14px; background: rgba(200, 40, 30, 0.9); color: #fff;
+  font-size: 22px; font-weight: 800; animation: blink 0.8s steps(2) infinite;
+}
+@keyframes blink { 50% { opacity: 0.45; } }
+
+/* 訊息帶(左下) */
+.message-ribbon {
+  position: absolute; bottom: 56px; left: 14px; z-index: 20;
+  max-width: min(60vw, 520px); padding: 8px 18px; border-radius: 999px;
+  background: rgba(10, 16, 30, 0.72); font-size: 16px; font-weight: 600;
+}
+@media (pointer: coarse) { .message-ribbon { bottom: 150px; } }
+
+/* 觸控 */
+.touch-controls { display: none; }
+@media (pointer: coarse) {
+  .touch-controls { display: block; position: absolute; inset: 0; z-index: 25; pointer-events: none; }
+  .touch-left, .touch-right { position: absolute; bottom: calc(14px + env(safe-area-inset-bottom)); display: flex; gap: 12px; pointer-events: auto; }
+  .touch-left { left: calc(14px + env(safe-area-inset-left)); }
+  .touch-right { right: calc(14px + env(safe-area-inset-right)); align-items: flex-end; }
+  .touch-btn { min-width: 84px; min-height: 84px; border-radius: 22px; border: 2px solid rgba(255,255,255,0.35);
+    background: rgba(10, 16, 30, 0.6); color: #fff; font-size: 24px; font-weight: 800; touch-action: none; -webkit-tap-highlight-color: transparent; }
+  .touch-btn.gas { background: rgba(60, 170, 90, 0.7); min-width: 100px; min-height: 100px; }
+  .touch-btn.brake { background: rgba(200, 60, 50, 0.7); font-size: 20px; }
+  .touch-btn.small { min-width: 64px; min-height: 64px; font-size: 26px; background: rgba(255, 180, 60, 0.6); }
+  .touch-btn.active { filter: brightness(1.4); transform: scale(0.96); }
+}
+
+/* HUD 鈕(下方) */
+.hud-buttons { position: absolute; bottom: 12px; left: 14px; z-index: 26; display: flex; gap: 8px; flex-wrap: wrap; }
+.hud-buttons button {
+  min-height: 34px; padding: 6px 12px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.22);
+  background: rgba(10, 16, 30, 0.7); color: #eef2f8; font-size: 13px; cursor: pointer;
+}
+.hud-buttons button:hover { background: rgba(40, 60, 100, 0.85); }
+@media (pointer: coarse) { .hud-buttons { left: 50%; transform: translateX(-50%); bottom: calc(10px + env(safe-area-inset-bottom)); } }
+
+/* 蓋版(說明/結算) */
+.overlay-shell {
+  position: fixed; inset: 0; z-index: 60; display: none; align-items: center; justify-content: center;
+  background: rgba(4, 8, 18, 0.66); padding: 16px;
+}
+.overlay-shell.visible { display: flex; }
+.overlay-card {
+  width: min(92vw, 560px); max-height: 92vh; overflow: auto; padding: 22px 26px; border-radius: 22px;
+  background: #121a2c; border: 1px solid rgba(255, 210, 74, 0.35); box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+}
+.overlay-eyebrow { font-size: 12px; letter-spacing: 0.2em; opacity: 0.7; margin-bottom: 6px; }
+.overlay-card h2 { font-size: 26px; margin-bottom: 8px; }
+.overlay-card p { line-height: 1.6; }
+.help-body { display: flex; flex-direction: column; gap: 10px; font-size: 15px; line-height: 1.7; }
+.help-body .rule { padding: 8px 12px; border-radius: 12px; background: rgba(125, 224, 140, 0.12); }
+.overlay-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 16px; flex-wrap: wrap; }
+.overlay-actions button {
+  min-height: 44px; padding: 10px 20px; border-radius: 12px; border: 0; cursor: pointer;
+  background: #ffd24a; color: #201a06; font-weight: 800; font-size: 16px;
+}
+.overlay-actions button:first-child { background: rgba(255,255,255,0.14); color: #fff; }
+.result-table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 15px; font-variant-numeric: tabular-nums; }
+.result-table td { padding: 6px 8px; border-bottom: 1px solid rgba(255,255,255,0.08); }
+.result-table tr.me td { background: rgba(255, 210, 74, 0.14); font-weight: 800; }
+.result-table .dot { display: inline-block; width: 12px; height: 12px; border-radius: 50%; margin-right: 8px; vertical-align: middle; border: 1px solid rgba(255,255,255,0.4); }
+.result-card h2 { font-size: 30px; }
+
+/* 首頁 */
+.home-screen {
+  position: fixed; inset: 0; z-index: 50; display: none; align-items: center; justify-content: center;
+  background: linear-gradient(180deg, rgba(6, 10, 22, 0.55), rgba(6, 10, 22, 0.85)); padding: 16px;
+}
+.home-screen.visible { display: flex; }
+.home-card {
+  width: min(94vw, 640px); max-height: 94vh; overflow: auto; padding: 24px 28px; border-radius: 24px;
+  background: rgba(14, 20, 36, 0.94); border: 1px solid rgba(255, 210, 74, 0.35); box-shadow: 0 24px 80px rgba(0,0,0,0.55);
+}
+.home-eyebrow { font-size: 12px; letter-spacing: 0.25em; opacity: 0.7; }
+.home-card h1 { font-size: 34px; margin: 4px 0 6px; }
+.home-sub { font-size: 15px; opacity: 0.9; line-height: 1.6; margin-bottom: 14px; }
+.home-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px 14px; margin: 10px 0; }
+.home-row label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; opacity: 0.9; }
+/* ★ 深色 select 鐵則:Windows 展開選單是系統白底 */
+select { color-scheme: dark; min-height: 40px; padding: 6px 10px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.25);
+  background: #1a2338; color: #eef2f8; font-size: 15px; }
+option { background: #1a2338; color: #eef2f8; }
+.home-hint { font-size: 13px; opacity: 0.8; line-height: 1.6; margin: 10px 0; }
+.ver-tag { font-size: 12px; opacity: 0.6; }
+.start-button {
+  width: 100%; min-height: 54px; border: 0; border-radius: 16px; cursor: pointer;
+  background: linear-gradient(90deg, #ffb347, #ffd24a); color: #201a06; font-size: 20px; font-weight: 900;
+}
+.start-button:hover { filter: brightness(1.06); }
+@media (prefers-reduced-motion: reduce) { .countdown, .wrong-way, .rotate-emoji { animation: none; } }

@@ -1,0 +1,26 @@
+racing3d 交接 — 2026-09-05(首日開工)
+
+★ 現況(以這段為準)
+- 已完成:可玩的 3D 賽車 v1。三條賽道(草原 1338m / 沙漠 1836m / 雪山 1199m,含高度剖面)、
+  五檔視角(追尾/車頭/駕駛座第一人稱/高空俯瞰/轉播機位;V 或 1~5 切,localStorage 記住)、
+  AI 對手 0~5 台(追點+彎前煞車+閃避+溫柔橡皮筋+渦輪同計費)、難度五檔、渦輪(遲滯計費)、
+  溫柔規則(撞牆彈開/草地變慢/卡住自動救援/逆向提醒/人人完賽有獎牌)、車對車碰撞推開、
+  鍵盤/觸控/手把、合成音效(引擎聲跟車速)、小地圖、結算卡、PWA 殼(manifest/sw/icon)、
+  psPing/-done/-dwell beacon、返回大廳鈕、直向提示+全螢幕鎖橫向、LINE 內建瀏覽器提醒。
+- 驗收:npm test 384 項全綠(track 181 / vehicle 68 / race headless 135);
+  npm run check:local 真瀏覽器 34/34 全綠,截圖在 screenshots/(首頁/倒數/五視角/駕駛座右轉/結算)。
+- 尚未:git init / GitHub / 部署(新站一律 CF:/ship-cf → hfpc-racing3d)、大廳卡、
+  預烤人聲播報(baked-voice-commentary:倒數/最後一圈/衝線)、雙人同機、幽靈車、聖經皮。
+
+★ 待使用者拍板
+- 要不要現在部署到 Cloudflare Pages(hfpc-racing3d)並點亮奧運頁/大廳卡?
+- 玩家起跑格「排最後」(為了追尾鏡頭與超車樂趣)——若孩子想排前面,改 game.js startRace 的 grid 那段。
+- 幼兒檔輔助強度(vehicle.js DIFFICULTY.kids.assist 0.6):只給油不轉向 20 秒仍撞牆 19 次,要更保母就調 0.8~1。
+
+★ 首跑踩過的雷(已修,勿重踩;細節在 CLAUDE.md「地雷」段)
+1. 橫向滑移漏乘 dt → 直線上左右擺到出牆。
+2. 路面帶狀網格繞序反了 → 整條路被背面剔除,測試全綠、截圖才抓到。
+3. 追尾鏡頭位置 lerp 落後 → 第二排車卡在鏡頭裡;改「位置剛性、方向平滑」+ 玩家排最後。
+4. 駕駛座後視鏡/頂梁離眼 0.3m 佈滿畫面 → 移到擋風玻璃頂;車身側傾只給鏡頭 40%。
+
+指令:npm run dev(run.bat)/ npm test / npm run build && npm run check:local

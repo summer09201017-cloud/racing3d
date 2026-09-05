@@ -1,0 +1,12 @@
+{
+  "name": "3D 賽車・駕駛座視角",
+  "short_name": "3D賽車",
+  "start_url": "./",
+  "display": "standalone",
+  "orientation": "landscape",
+  "background_color": "#0c1322",
+  "theme_color": "#0c1322",
+  "icons": [
+    { "src": "./icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

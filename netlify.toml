@@ -1,0 +1,20 @@
+# racing3d — Netlify direct upload(不接 GitHub auto-build;部署 = 本機 npm run build → netlify deploy --prod --dir dist)
+# 2026-09-06:Cloudflare 帳號 ToS 審查凍結期間,純靜態新站先上 Netlify(站名 new- 前綴);解除後再搬 CF Pages。
+[build]
+  publish = "dist"
+  ignore = "exit 0"   # 萬一被接上 Git 連動也取消雲端 build(exit 0 = 取消)
+
+[[headers]]
+  for = "/manifest.webmanifest"
+  [headers.values]
+    Content-Type = "application/manifest+json; charset=utf-8"
+
+[[headers]]
+  for = "/sw.js"
+  [headers.values]
+    Cache-Control = "no-cache"
+
+[[headers]]
+  for = "/index.html"
+  [headers.values]
+    Cache-Control = "no-cache"

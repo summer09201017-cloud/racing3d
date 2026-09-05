@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#0c1322" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="icon" href="./icon.svg" />
+    <title>3D 賽車・駕駛座視角 Racing 3D</title>
+  </head>
+  <body>
+    <main class="app-shell">
+      <canvas id="gameCanvas" aria-label="3D 賽車遊戲畫面"></canvas>
+
+      <!-- 直向蓋版提示(force-landscape-pwa) -->
+      <div id="rotate" class="rotate-hint" aria-hidden="true">
+        <div class="rotate-emoji">🔄</div>
+        <p>請把手機轉成<b>橫向</b>來玩<br /><span>轉成橫向會自動全螢幕</span></p>
+      </div>
+
+      <!-- 比賽 HUD(左上:圈數/名次;右上:小地圖;右下:速度表+渦輪;中央:倒數/逆向) -->
+      <div class="race-card" id="raceCard" hidden>
+        <div class="race-line big"><span id="lapText">第 1 / 3 圈</span></div>
+        <div class="race-line"><span id="rankText">第 1 名 / 4</span></div>
+        <div class="race-line small"><span id="timeText">0:00.0</span>・單圈 <span id="lapTimeText">0:00.0</span>・最佳 <span id="bestText">--:--.-</span></div>
+      </div>
+
+      <div class="mini-wrap" id="miniWrap" hidden>
+        <canvas id="miniMap" width="170" height="170"></canvas>
+        <div class="view-tag" id="viewTag">視角:追尾跟隨</div>
+      </div>
+
+      <div class="speed-panel" id="speedPanel" hidden>
+        <div class="speed-num"><span id="speedText">0</span><small>km/h</small></div>
+        <div class="turbo-row" id="turboRow">
+          <span class="turbo-label">⚡ 渦輪</span>
+          <div class="turbo-track"><div class="turbo-fill" id="turboFill"></div></div>
+        </div>
+        <div class="speed-hint" id="speedHint">↑ 油門・↓ 煞車・← → 轉向・Shift 渦輪・V 視角・R 回賽道</div>
+      </div>
+
+      <div class="countdown" id="countdown" hidden>3</div>
+      <div class="wrong-way" id="wrongWay" hidden>⚠ 方向反了!請掉頭</div>
+      <div class="message-ribbon" id="statusMessage">選好賽道、圈數與難度,按「開始比賽」。</div>
+
+      <!-- 觸控(只在觸控裝置顯示):左下轉向、右下油門/煞車/渦輪 -->
+      <div class="touch-controls" id="touchControls">
+        <div class="touch-left">
+          <button id="tLeft" class="touch-btn">◀</button>
+          <button id="tRight" class="touch-btn">▶</button>
+        </div>
+        <div class="touch-right">
+          <button id="tBoost" class="touch-btn small">⚡</button>
+          <button id="tBrake" class="touch-btn brake">煞車</button>
+          <button id="tGas" class="touch-btn gas">油門</button>
+        </div>
+      </div>
+
+      <div class="hud-buttons">
+        <button id="menuButton">選單</button>
+        <button id="audioButton">音效開啟</button>
+        <button id="cameraButton">視角</button>
+        <button id="rescueButton" hidden>回賽道</button>
+        <button id="helpButton">玩法</button>
+        <button id="fsButton" aria-label="全螢幕">⛶</button>
+      </div>
+
+      <!-- ❓ 玩法說明(對著實作寫:鍵位=main.js、視角=game.js CAM_LABELS、溫柔規則=vehicle.js) -->
+      <div class="overlay-shell" id="helpOverlay">
+        <div class="overlay-card help-card">
+          <p class="overlay-eyebrow">玩法說明</p>
+          <h2>🏎️ 怎麼玩</h2>
+          <div class="help-body">
+            <div>🕹️ <b>開車</b>:<b>↑ / W</b> 油門、<b>↓ / S</b> 煞車(停住後繼續按=倒車)、<b>← → / A D</b> 轉向。<b>Shift</b> 渦輪加速(右下角 ⚡ 條,用完要等它回到三成才能再衝)、<b>空白鍵</b> 手煞甩尾。手機:左下 ◀▶ 轉向、右下 油門/煞車/⚡。也支援 Xbox/USB 手把(A 油門、B 煞車、X 渦輪、Y 視角)。</div>
+            <div>📷 <b>視角</b>:<b>V</b> 或「視角」鈕循環五檔:<b>追尾跟隨 → 車頭 → 駕駛座(第一人稱,方向盤會跟著轉、儀表指針跟著速度)→ 高空俯瞰 → 轉播機位</b>。數字鍵 <b>1~5</b> 直接跳。選擇會記住。</div>
+            <div>🏁 <b>比賽</b>:倒數 3、2、1、GO!跑完設定的圈數就完賽,名次看誰先過終點線。地上<b>黃底黑箭頭</b>=前面有急彎,先煞車再轉。</div>
+            <div class="rule">🤗 <b>溫柔規則</b>:撞牆只會彈開掉速,不會翻車;開到草地會變慢;卡住 2.5 秒會自動放回賽道(或按 <b>R</b> / 「回賽道」)。開反方向會提醒你掉頭。人人跑得完,結算都有獎牌。</div>
+          </div>
+          <div class="overlay-actions">
+            <button id="helpCloseButton">知道了,開車!</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 結算 -->
+      <div class="overlay-shell" id="resultOverlay">
+        <div class="overlay-card result-card">
+          <p class="overlay-eyebrow" id="resultEyebrow">比賽結束</p>
+          <h2 id="resultTitle">—</h2>
+          <p id="resultText">—</p>
+          <table class="result-table" id="resultTable"></table>
+          <div class="overlay-actions">
+            <button id="resultMenuButton">回選單</button>
+            <button id="resultAgainButton">再來一場</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="home-screen visible" id="homeScreen">
+        <div class="home-card">
+          <p class="home-eyebrow">RACING 3D・五檔視角</p>
+          <h1>🏎️ 3D 賽車</h1>
+          <p class="home-sub">追尾、車頭、<b>駕駛座第一人稱</b>、高空俯瞰、轉播機位——邊開邊切視角,坐進車裡開!</p>
+
+          <div class="home-row">
+            <label>賽道
+              <select id="trackSelect"></select>
+            </label>
+            <label>圈數
+              <select id="lapsSelect"></select>
+            </label>
+            <label>對手
+              <select id="aiSelect"></select>
+            </label>
+            <label>難度
+              <select id="difficultySelect"></select>
+            </label>
+            <label>車色
+              <select id="colorSelect"></select>
+            </label>
+            <label>音效
+              <select id="audioSelect">
+                <option value="on" selected>開啟</option>
+                <option value="off">靜音</option>
+              </select>
+            </label>
+          </div>
+
+          <p class="home-hint">↑ 油門、↓ 煞車、← → 轉向、Shift 渦輪、空白鍵手煞;<b>V 切視角</b>(或數字鍵 1~5)。幼兒檔會輕輕幫你把車拉回路中間;撞牆不會翻、卡住會自動放回賽道。</p>
+          <p class="home-hint ver-tag" id="verTag">版本 v1(2026-09-05)・首發:三條賽道(草原/沙漠/雪山)、五檔視角含駕駛座第一人稱(方向盤/儀表跟著動)、AI 對手 0~5 台、難度五檔、渦輪、溫柔規則。</p>
+          <button class="start-button" id="startButton">開始比賽</button>
+        </div>
+      </div>
+    </main>
+    <script type="module" src="/src/main.js"></script>
+<script>
+// play-stats 匿名計數(雙平台化:只擋本機)。
+try {
+  if (!['localhost', '127.0.0.1', ''].includes(location.hostname)) {
+    navigator.sendBeacon?.('https://hfpc-play-stats.summer09201017.workers.dev/api/ping?g=racing3d');
+  }
+} catch (_) {}
+</script>
+<script>
+// ← 返回大廳(back-to-lobby-button):孩子卡住要能離開。只導頁,絕不呼叫 onComplete。
+(function () {
+  var LOBBY = 'https://hfpc-olympics.summer09201017.workers.dev';
+  function go() {
+    try { if (document.fullscreenElement && document.exitFullscreen) document.exitFullscreen(); } catch (e) {}
+    if (window.parent && window.parent !== window) {
+      try { window.parent.postMessage({ type: 'hfpc-exit' }, '*'); } catch (e) {}
+      if (history.length > 1) { history.back(); return; }
+    }
+    location.href = LOBBY;
+  }
+  function add() {
+    if (document.querySelector('[data-hfpc-lobby]')) return;
+    var b = document.createElement('button');
+    b.textContent = '← 返回大廳';
+    b.setAttribute('aria-label', '返回大廳');
+    b.setAttribute('data-hfpc-lobby', '1');
+    b.style.cssText = 'position:fixed;z-index:2147483000;' +
+      'top:calc(8px + env(safe-area-inset-top));left:calc(8px + env(safe-area-inset-left));' +
+      'min-width:44px;min-height:44px;padding:9px 14px;border:0;border-radius:12px;' +
+      'font:600 15px/1.2 system-ui,"Microsoft JhengHei",sans-serif;' +
+      'background:rgba(0,0,0,.58);color:#fff;cursor:pointer;-webkit-tap-highlight-color:transparent';
+    b.addEventListener('click', go);
+    (document.body || document.documentElement).appendChild(b);
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', add); else add();
+})();
+</script>
+</body>
+</html>
