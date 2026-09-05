@@ -159,11 +159,14 @@ option { background: #1a2338; color: #eef2f8; }
 
 /* ── 雙人同機(分割畫面):左半 P1(藍)、右半 P2(紅);duel-2p-kit 顏色鐵則 ── */
 .seam { position: absolute; top: 0; bottom: 0; left: 50%; width: 2px; margin-left: -1px; background: rgba(255,255,255,0.55); z-index: 15; pointer-events: none; }
-.race-card.p2 { left: calc(50% + 12px); border-color: rgba(255, 90, 80, 0.55); }
+/* P2 卡片放右上角(不貼著接縫):置中的小地圖會跟它疊在一起——0906 分割畫面截圖抓到 */
+.race-card.p2 { left: auto; right: 12px; border-color: rgba(255, 90, 80, 0.55); }
 .race-card.p2 .race-line.big { color: #ff8a80; }
 .duel2p .race-card:not(.p2) { border-color: rgba(100, 160, 255, 0.55); }
 .duel2p .race-card:not(.p2) .race-line.big { color: #8ab4ff; }
 .duel2p .mini-wrap { right: auto; left: 50%; transform: translateX(-50%); align-items: center; }
+.duel2p #miniMap { width: 116px; height: 116px; }   /* 分割畫面:縮小,才不會壓到兩邊的卡片 */
+.duel2p .view-tag { display: none; }                /* 視角改印在各自的鍵位提示裡(左右各一份) */
 .duel2p .speed-panel:not(.p2) { right: calc(50% + 12px); }
 .speed-panel.p2 { right: 12px; border-color: rgba(255, 90, 80, 0.45); }
 .duel2p .speed-panel:not(.p2) { border-color: rgba(100, 160, 255, 0.45); }

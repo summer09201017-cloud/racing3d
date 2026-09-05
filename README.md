@@ -4,11 +4,15 @@
 以及**五檔視角**——追尾跟隨、車頭、**駕駛座第一人稱(方向盤跟著轉、儀表指針跟著速度)**、高空俯瞰、轉播機位。
 V 鍵或「視角」鈕循環,數字鍵 1~5 直跳,選擇會記住。
 
+**兩個孩子可以同一台電腦一起比**:分割畫面雙人同機,左半 P1(藍)、右半 P2(紅)。
+比賽全程有**人聲播報**(預烤的神經語音,不是機器聲):預備、倒數、最後一圈、衝線。
+
 溫柔規則:撞牆只彈開掉速、不翻車;開到草地變慢;卡住 2.5 秒自動放回賽道(或按 R);開反方向會提醒掉頭;人人跑得完,結算都有獎牌。
 
 ## 線上
 
-https://new-hfpc-racing3d.netlify.app (Netlify direct upload;Cloudflare 審查解除後搬 CF Pages,見 CLAUDE.md「部署」)
+<https://new-hfpc-racing3d.netlify.app>
+(Netlify direct upload;Cloudflare 帳號審查解除後搬 CF Pages,見 `CLAUDE.md`「部署」)
 
 ## 玩
 
@@ -17,16 +21,53 @@ npm install
 npm run dev        # 或雙擊 run.bat
 ```
 
-鍵盤:↑/W 油門、↓/S 煞車(停住後繼續按=倒車)、←→/AD 轉向、Shift 渦輪、空白鍵手煞甩尾、V 視角、R 回賽道、H 玩法、Esc 選單。
+**單人**:↑/W 油門、↓/S 煞車(停住後繼續按=倒車)、←→/AD 轉向、Shift 渦輪、空白鍵手煞甩尾、V 視角、R 回賽道、H 玩法、Esc 選單。
 手機:左下 ◀▶ 轉向、右下 油門/煞車/⚡;直向會提示轉橫、開賽自動全螢幕。手把:A 油門、B 煞車、X 渦輪、Y 視角。
+
+**雙人同機**(選單「模式」→ 雙人同機):一副鍵盤兩個人,畫面左右分割。
+
+| | P1(藍・左半) | P2(紅・右半) |
+|---|---|---|
+| 油門 / 煞車 | W / S | ↑ / ↓ |
+| 轉向 | A / D | ← / → |
+| 渦輪 | 左 Shift | 右 Shift |
+| 手煞 | 空白鍵 | Enter |
+| 切視角 | V(或 1~5 直跳) | 0 |
+| 回賽道 | R | Backspace |
+
+兩個人都過線才結算,先過線的名次高。雙人時車色固定 P1 藍 / P2 紅,觸控與手把只給 P1。
+**單人時 P2 那排鍵會自動別名回 P1**,所以方向鍵照樣能開,不會有死鍵。
+
+## 選單
+
+| 選項 | 說明 |
+|---|---|
+| 模式 | 單人 / 雙人同機(分割畫面) |
+| 賽道 | 草原環道 / 沙漠長直線 / 雪山彎道 |
+| 圈數・對手・難度 | 1~5 圈、0~5 台電腦車、五檔難度 |
+| **AI 輕扶回中** | 快貼到路邊時 AI 輕輕把車拉回路中間,你自己在打方向它就少介入。**任何難度都能開**(職業也可以);「自動」=幼兒/兒童/入門才開 |
+| **起跑格** | 最後一排(預設,從後面往前超車最好玩)/ 最前排 |
+| 車色 | 七色(雙人模式固定 P1 藍 P2 紅,選單會鎖起來) |
+| 音效與播報 | 一起開關(引擎聲、音效、人聲播報) |
+
+難度五檔的極速:幼兒 86、兒童 108、入門 133、標準 158、職業 180 km/h。
 
 ## 測
 
 ```bash
-npm test                              # node 純函數三層(賽道/車體/整場 headless)
+npm test                              # node 純函數五層:賽道 / 車體 / 整場 headless / 雙人+輔助+起跑格 / 播報對賬
 npm run build && npm run check:local  # 真瀏覽器截圖驗收(Edge,免下載)→ screenshots/
+npm run voice                         # 重烤人聲 mp3(需網路;新增唸稿後才要跑)
 ```
+
+## 改內容
+
+- **加一條賽道**:`src/track.js` 的 `TRACKS` 加一筆(控制點、路寬、高度剖面、配色、路邊景物),不用改程式。
+- **調難度/極速**:`src/vehicle.js` 的 `DIFFICULTY`(玩家極速與加速、AI 極速與技巧、輔助預設強度、抓地)。
+- **調輔助手感**:`src/vehicle.js` 的 `ASSIST`(`dead` 死區、`kP` 拉回力、`kD` 煞住衝過頭)。
+- **加播報句**:`src/voicePhrases.js` 的 `PHRASES` 加句子、`src/commentary.js` 決定哪個事件唸它,然後 `npm run voice` 烤 mp3。
 
 ## 結構
 
-`src/track.js`(賽道純算術)→ `src/vehicle.js`(車體物理)→ `src/ai.js`(對手)→ `src/game.js`(THREE 場景/視角/狀態機)→ `src/main.js`(UI)。詳見 `CLAUDE.md`。
+`src/track.js`(賽道純算術)→ `src/vehicle.js`(車體物理+輔助)→ `src/ai.js`(對手)→ `src/game.js`(THREE 場景/雙視窗鏡頭/狀態機)→ `src/main.js`(UI)。
+人聲三件套:`src/voicePhrases.js`(詞庫)+ `scripts/gen-voice.mjs`(烤製)+ `src/voice.js`(runtime)+ `src/commentary.js`(事件→唸稿)。詳見 `CLAUDE.md`。

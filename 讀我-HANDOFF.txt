@@ -1,35 +1,57 @@
-racing3d 交接 — 2026-09-06(第二日:上 GitHub + Netlify)
+racing3d 交接 — 2026-09-06(v2:極速/輔助/起跑格/人聲/雙人同機)
 
 ★ 現況(以這段為準)
-- 已完成:可玩的 3D 賽車 v1。三條賽道(草原 1338m / 沙漠 1836m / 雪山 1199m,含高度剖面)、
-  五檔視角(追尾/車頭/駕駛座第一人稱/高空俯瞰/轉播機位;V 或 1~5 切,localStorage 記住)、
-  AI 對手 0~5 台(追點+彎前煞車+閃避+溫柔橡皮筋+渦輪同計費)、難度五檔、渦輪(遲滯計費)、
-  溫柔規則(撞牆彈開/草地變慢/卡住自動救援/逆向提醒/人人完賽有獎牌)、車對車碰撞推開、
-  鍵盤/觸控/手把、合成音效(引擎聲跟車速)、小地圖、結算卡、PWA 殼(manifest/sw/icon)、
-  psPing/-done/-dwell beacon、返回大廳鈕、直向提示+全螢幕鎖橫向、LINE 內建瀏覽器提醒。
-- 驗收:npm test 384 項全綠(track 181 / vehicle 68 / race headless 135);
-  check:local 真瀏覽器 34/34;線上 browser-check 34/34(2026-09-06 對 Netlify 正址跑)。
-- 2026-09-06 上線:
-  · GitHub  https://github.com/summer09201017-cloud/racing3d(main,首 commit ae31de3)
-  · Netlify https://new-hfpc-racing3d.netlify.app(site id 4d240b0c-e780-4962-bf85-30779e678b64,
-    direct upload、repo_url=null 未接 GitHub build ⇒ git push 不會上線,改完要重跑 netlify deploy)
-  · 為什麼 Netlify 不是 CF:Cloudflare 帳號 0903 起 ToS 審查凍結;0904 使用者拍板「凍結期間純靜態新站先上
-    Netlify、站名加 new- 前綴」。審查解除後搬 CF Pages(hfpc-racing3d),一週 3~5 站慢搬。
-- 尚未:帳本四處(奧運頁卡 Desktop/hfpc-olympics、作品集 add-work、sites.json、play-stats Worker NAMES,
-  四處都要重佈 CF Worker)、預烤人聲播報(baked-voice-commentary:倒數/最後一圈/衝線)、
-  雙人同機、幽靈車、聖經皮。
+- 已完成 v1(09-05 一天建成)+ v2(09-06)。線上是 v2。
+  · 三條賽道(草原 1338m / 沙漠 1836m / 雪山 1199m,含高度剖面)
+  · 五檔視角(追尾/車頭/駕駛座第一人稱/高空俯瞰/轉播機位;V 或 1~5 切,localStorage 記住)
+  · AI 對手 0~5 台、難度五檔、渦輪(遲滯計費)、車對車溫柔碰撞
+  · 溫柔規則(撞牆彈開/草地變慢/卡住自動救援/逆向提醒/人人完賽有獎牌)
+  · 鍵盤/觸控/手把、合成音效、小地圖、結算卡、PWA 殼、psPing/-done/-dwell、返回大廳鈕、
+    直向提示+全螢幕鎖橫向、LINE 內建瀏覽器提醒
+  · 【v2】極速提高:幼兒 86 / 兒童 108 / 入門 133 / 標準 158 / 職業 180 km/h
+  · 【v2】「AI 輕扶回中」選單開關(auto/on/off,任何難度都能開,職業也可以)
+  · 【v2】起跑格可選(最後一排=預設 / 最前排)
+  · 【v2】人聲播報:預烤 mp3 雲哲神經語音 18 句(預備/倒數/出發/完成一圈/最後一圈/逆向/救援/衝線/雙人勝負)
+  · 【v2】雙人同機分割畫面:左 P1 藍 / 右 P2 紅,兩套鍵位、兩份鏡頭與 HUD,兩人都過線才結算
 
-★ 待使用者拍板
-- 帳本四處要不要現在登記?(每一處都是「更新既有 CF Worker」,0903 自訂規則允許小改,但仍是碰 CF)
-- 玩家起跑格「排最後」(為了追尾鏡頭與超車樂趣)——若孩子想排前面,改 game.js startRace 的 grid 那段。
-- 幼兒檔輔助強度(vehicle.js DIFFICULTY.kids.assist 0.6):只給油不轉向 20 秒仍撞牆 19 次,要更保母就調 0.8~1。
+- 驗收(0906 實跑,不是憑印象):
+  · npm test 533 項全綠 = track 181 / vehicle 77 / race 141 / race2p 60 / commentary 74
+  · npm run check:local 真瀏覽器 52/52,截圖在 screenshots/(首頁/倒數/五視角/駕駛座右轉/結算/
+    雙人分割畫面/雙人結算)
+  · 線上 CHECK_URL browser-check 52/52(對 Netlify 正址跑)
 
-★ 首跑踩過的雷(已修,勿重踩;細節在 CLAUDE.md「地雷」段)
+- 版控與部署:
+  · GitHub https://github.com/summer09201017-cloud/racing3d(main)
+  · Netlify https://new-hfpc-racing3d.netlify.app
+    site id 4d240b0c-e780-4962-bf85-30779e678b64,direct upload、repo_url=null 未接 GitHub build
+    ⇒ ★ git push 不會上線,改完一定要重跑:
+      npm test && npm run build && netlify deploy --prod --dir dist --site <id> --no-build
+  · 為什麼在 Netlify 不在 CF:Cloudflare 帳號 0903 起 ToS 審查凍結;0904 使用者拍板
+    「凍結期間純靜態新站先上 Netlify、站名加 new- 前綴」。審查解除後搬 CF Pages(hfpc-racing3d)。
+  · 帳本四處 0906 已登記完成(0905-bb 場做的,逐站驗過):
+    奧運頁卡 dca2e9c / 作品集 7c0fcad / play-stats NAMES+versions 87ec829 / sites.json 兩份。
+
+★ 待使用者拍板(別動工)
+- 審查解除後要不要立刻搬 CF Pages?(搬完帳本四處網址要一起改;統計鍵 ?g=racing3d 不變,
+  但 origin 變 ⇒ 已裝的 PWA 要重裝)
+- roadmap.md「待做」第 2~5 項的優先序:幽靈車 / 雙人手把分流 / 聖經皮 / 賽道編輯器。
+
+★ v2 這輪修掉的兩顆真 bug(不是調參,細節在 CLAUDE.md 地雷 8、9)
+1. 輔助是純 P 控制,極速提高後左右盪過頭 ⇒ kids 只給油 20 秒撞牆 17→23 次,開輔助比不開還糟。
+   改 PD(D 項吃新加的 car.latRate)。
+2. 輔助原本只在「路面上」作用,滑到草地那一刻整段停用——而那正是最需要扶的時候。改成出界也作用。
+   兩顆合起來:草原幼兒 17→0 次撞牆、職業(0.35)35→4;三條賽道五個難度全面改善。
+
+★ 首跑(v1)踩過的雷(已修,勿重踩;完整 13 條在 CLAUDE.md「地雷」段)
 1. 橫向滑移漏乘 dt → 直線上左右擺到出牆。
 2. 路面帶狀網格繞序反了 → 整條路被背面剔除,測試全綠、截圖才抓到。
 3. 追尾鏡頭位置 lerp 落後 → 第二排車卡在鏡頭裡;改「位置剛性、方向平滑」+ 玩家排最後。
 4. 駕駛座後視鏡/頂梁離眼 0.3m 佈滿畫面 → 移到擋風玻璃頂;車身側傾只給鏡頭 40%。
+5.(v2 新)雙人的駕駛座藏車艙要「每一刀各自判斷」;trackDist 不能拿來比同排(取樣量化,要比 progress);
+   本 repo 的 .js 是 CRLF,寫補丁腳本要先正規化換行。
 
-指令:npm run dev(run.bat)/ npm test / npm run build && npm run check:local
-部署:npm run build && netlify deploy --prod --dir dist --site 4d240b0c-e780-4962-bf85-30779e678b64 --no-build
-      → CHECK_URL=https://new-hfpc-racing3d.netlify.app node scripts/browser-check.mjs
+指令
+  npm run dev(或雙擊 run.bat)/ npm test / npm run build && npm run check:local / npm run voice
+部署
+  npm run build && netlify deploy --prod --dir dist --site 4d240b0c-e780-4962-bf85-30779e678b64 --no-build
+  → CHECK_URL=https://new-hfpc-racing3d.netlify.app node scripts/browser-check.mjs

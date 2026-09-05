@@ -317,9 +317,9 @@ game.onHud = (hud) => {
     ui.turboFill.style.transform = `scaleX(${Math.max(0, Math.min(1, hud.turbo)).toFixed(3)})`;
     ui.turboRow.classList.toggle("tired", !!hud.tired);
     ui.turboRow.classList.toggle("boosting", !!hud.boosting);
-    ui.speedHint.textContent = two ? `${P1_KEYS}・${assistTag}` : `${SOLO_KEYS}・${assistTag}`;
     const p1Label = hud.activeView === "tv" && hud.camView !== "tv" ? "轉播機位(結算)" : hud.camLabel;
-    ui.viewTag.textContent = two ? `P1 視角:${p1Label}` : `視角:${p1Label}`;
+    ui.speedHint.textContent = two ? `${P1_KEYS}・視角:${p1Label}` : `${SOLO_KEYS}・${assistTag}`;
+    ui.viewTag.textContent = `視角:${p1Label}`;   // 分割畫面時這顆被 CSS 藏起來(視角改印在左右各自的鍵位提示裡)
     if (two) {
       const q = hud.p2;
       ui.lapText2.textContent = `P2・第 ${q.lap} / ${hud.laps} 圈`;
