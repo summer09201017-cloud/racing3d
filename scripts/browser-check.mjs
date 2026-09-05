@@ -103,6 +103,63 @@ await page.screenshot({ path: OUT + "09-results.png" });
 await page.click("#resultMenuButton");
 await page.waitForTimeout(500);
 ok(await page.isVisible("#homeScreen.visible"), "回選單");
+
+// ── v2(0906):選單新選項 / 人聲 manifest / 雙人同機分割畫面 ──
+ok(await page.isVisible("#modeSelect") && await page.isVisible("#assistSelect") && await page.isVisible("#gridSelect"), "選單有 模式/輔助/起跑格");
+const voice = await page.evaluate(async () => { try { const r = await fetch("./voice/manifest.json"); const j = await r.json(); return { ok: r.ok, n: Object.keys(j).length }; } catch (e) { return { ok: false, n: 0 }; } });
+ok(voice.ok && voice.n >= 18, `人聲 manifest 可讀(${voice.n} 句)`);
+const mp3 = await page.evaluate(async () => { const j = await (await fetch("./voice/manifest.json")).json(); const p = Object.values(j)[0]; const r = await fetch("./" + p); return { status: r.status, type: r.headers.get("content-type") || "" }; });
+ok(mp3.status === 200 && /audio|mpeg|octet/.test(mp3.type), `第一支 mp3 200(${mp3.type})`);
+const diffLabel = await page.$eval("#difficultySelect option[value=hard]", (o) => o.textContent);
+ok(/180 km\/h/.test(diffLabel), `職業檔標籤「${diffLabel}」= 180 km/h`);
+// 雙人:選 duel2p、1 對手、開始
+await page.selectOption("#modeSelect", "duel2p");
+ok(await page.$eval("#colorSelect", (s) => s.disabled), "雙人模式車色選單鎖住");
+await page.selectOption("#aiSelect", "1");
+await page.click("#startButton");
+await page.waitForTimeout(300);
+if (await page.isVisible("#helpOverlay.visible")) await page.click("#helpCloseButton");
+ok(await page.evaluate(() => window.__racing3d.is2P() && window.__racing3d.players.length === 2), "雙人開賽:兩台人類車");
+ok(await page.evaluate(() => document.body.classList.contains("duel2p")), "body.duel2p");
+await page.evaluate(() => { window.__racing3d.autopilot = true; });
+await page.waitForTimeout(5500);
+ok(await page.isVisible("#raceCard2") && await page.isVisible("#speedPanel2") && await page.isVisible("#seam"), "P2 HUD + 分割線可見");
+await page.keyboard.press("3");   // P1 駕駛座
+await page.keyboard.press("0");   // P2 視角循環(chase→hood)
+await page.waitForTimeout(900);
+const two = await page.evaluate(() => {
+  const g = window.__racing3d;
+  const r1 = g.rigs.get(g.players[0]), r2 = g.rigs.get(g.players[1]);
+  return { v1: g.cams[0].view, v2: g.cams[1].view, hide1: r1.hide.map((m) => m.visible), hide2: r2.hide.map((m) => m.visible),
+    fin: g.cams.every((c) => [c.camera.position.x, c.camera.position.y, c.camera.position.z, c.camera.fov].every(Number.isFinite)),
+    aspect: g.cams[0].camera.aspect, w: g._vw, h: g._vh };
+});
+ok(two.v1 === "cockpit" && two.v2 === "hood", `P1 駕駛座 / P2 車頭(${two.v1}/${two.v2})`);
+ok(two.hide1.every((v) => v === false) && two.hide2.every((v) => v === true), "還原後:P1 車艙藏、P2 車艙顯示(各自視窗規則)");
+ok(two.fin && Math.abs(two.aspect - (two.w / 2) / two.h) < 1e-6, "兩鏡頭有限、各半長寬比");
+await page.screenshot({ path: OUT + "10-duel2p-split.png" });
+const hud2 = await page.evaluate(() => ["raceCard", "raceCard2", "speedPanel", "speedPanel2", "statusMessage", "viewTag"].map((id) => document.getElementById(id).textContent).join(" | "));
+ok(!/undefined|NaN|Invalid/.test(hud2), "雙人 HUD 無 undefined/NaN");
+ok(/P1/.test(hud2) && /P2/.test(hud2), "雙人 HUD 標 P1/P2");
+// 真鍵盤:方向鍵只動 P2(P1 不動)
+await page.evaluate(() => { window.__racing3d.autopilot = false; });
+await page.keyboard.down("ArrowRight");
+await page.waitForTimeout(400);
+const steer = await page.evaluate(() => ({ p1: window.__racing3d.input.steer, p2: window.__racing3d.input2.steer }));
+await page.keyboard.up("ArrowRight");
+ok(steer.p2 > 0.3 && Math.abs(steer.p1) < 0.01, `雙人:方向鍵只轉 P2(p1 ${steer.p1.toFixed(2)} / p2 ${steer.p2.toFixed(2)})`);
+await page.evaluate(() => { window.__racing3d.autopilot = true; });
+// 快轉到雙人結算
+const fin2 = await page.evaluate(() => { const g = window.__racing3d; for (let i = 0; i < 60 * 300 && g.phase !== "finished"; i++) g.update(1 / 60); return { phase: g.phase, title: g.results && g.results.title }; });
+ok(fin2.phase === "finished" && /P[12] 獲勝/.test(fin2.title || ""), `雙人快轉結算「${fin2.title}」`);
+await page.waitForTimeout(1800);
+ok(await page.isVisible("#resultOverlay.visible"), "雙人結算卡出現");
+ok(!/undefined|NaN/.test(await page.textContent("#resultOverlay")), "雙人結算卡無 undefined/NaN");
+await page.screenshot({ path: OUT + "11-duel2p-results.png" });
+await page.click("#resultMenuButton");
+await page.waitForTimeout(400);
+ok(await page.isVisible("#homeScreen.visible") && !(await page.evaluate(() => document.body.classList.contains("duel2p"))), "回選單、duel2p class 移除");
+await page.selectOption("#modeSelect", "solo");
 ok(errors.length === 0, `0 pageerror(${errors.length})`);
 for (const e of errors) console.log("   ", e);
 await browser.close();

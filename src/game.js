@@ -5,10 +5,17 @@
 // ★ 視角名單一份常數(CAM_VIEWS + CAM_LABELS),localStorage 驗證與 cycleCamView 吃同一份。
 import * as THREE from "three";
 import { TRACKS, TRACK_IDS, buildTrack, posAt, pointAtOffset, rightOfTangent, tvCameraSpots, nearest } from "./track.js";
-import { CAR, DIFFICULTY, createCar, placeOnTrack, stepCar, emptyInput, rescue, forwardOf, rpm01, kmh, clamp, resolveCollisions } from "./vehicle.js";
+import { CAR, DIFFICULTY, ASSIST_MODES, ASSIST_LABELS, assistStrength, createCar, placeOnTrack, stepCar, emptyInput, rescue, forwardOf, rpm01, kmh, clamp, resolveCollisions } from "./vehicle.js";
 import { makeAiBrain, aiInput } from "./ai.js";
 
-export { TRACKS, TRACK_IDS, DIFFICULTY };
+export { TRACKS, TRACK_IDS, DIFFICULTY, ASSIST_MODES, ASSIST_LABELS };
+
+/* 模式(duel-2p-kit 單閘門:所有分歧只問 is2P()):solo=單人;duel2p=雙人同機分割畫面(左 P1 藍、右 P2 紅,鐵則色)。 */
+export const MODES = { solo: { id: "solo", label: "單人" }, duel2p: { id: "duel2p", label: "雙人同機(分割畫面)" } };
+export const P1_COLOR = 1, P2_COLOR = 0;   // 海洋藍 / 烈焰紅(全系列 P1 藍 P2 紅,孩子跨遊戲不用重學)
+/* 起跑格(0906 收掉待拍板):last=玩家排最後(後面沒車擋追尾鏡頭、超車才好玩,預設);front=玩家排最前排。 */
+export const GRID_OPTIONS = ["last", "front"];
+export const GRID_LABELS = { last: "最後一排(超車最好玩)", front: "最前排" };
 
 /* 視角五檔(V 鍵/視角鈕照這個順序輪)。每檔都要有中文名(缺名=畫面印「視角:undefined」)。
    tv 只在「結算/回放」自動用,手動選也可以——但它是固定機位,轉向仍是「車的左右」(方向盤就是方向盤)。 */
@@ -28,7 +35,7 @@ export const CAR_COLORS = [
 export const LAP_OPTIONS = [1, 2, 3, 5];
 export const AI_OPTIONS = [0, 1, 2, 3, 5];
 export const AI_NAMES = ["阿福", "小美", "大衛", "以諾", "米迦", "撒拉", "約書亞"];
-export const DEFAULT_SETTINGS = { trackId: "meadow", laps: 3, aiCount: 3, difficulty: "easy", colorIdx: 0 };
+export const DEFAULT_SETTINGS = { trackId: "meadow", laps: 3, aiCount: 3, difficulty: "easy", colorIdx: 0, mode: "solo", assist: "auto", gridPos: "last" };
 const COUNTDOWN_SECONDS = 3.6;
 
 const V = () => new THREE.Vector3();
@@ -41,10 +48,12 @@ export class RacingGame {
     this.phase = "menu";          // menu | countdown | racing | finished
     this.running = false;         // ★ 只給 RAF
     this.settings = { ...DEFAULT_SETTINGS };
-    this.input = emptyInput();
-    this.autopilot = false;       // 測試/展示:玩家車交給 AI
+    this.input = emptyInput();    // P1
+    this.input2 = emptyInput();   // P2(雙人同機)
+    this.autopilot = false;       // 測試/展示:玩家車(全部人類車)交給 AI
     this.cars = []; this.rigs = new Map(); this.brains = new Map();
-    this.player = null;
+    this.player = null;           // P1(相容舊呼叫)
+    this.players = [];            // 人類車手 [P1, P2?];索引 = car.playerIdx = 視窗索引
     this.raceT = 0; this.countdownT = 0; this._cdLast = 99;
     this.finishOrder = []; this.results = null; this._allAiDoneT = 0;
     this.message = ""; this.messageT = 0;
@@ -52,23 +61,14 @@ export class RacingGame {
     this.time = 0;
     this.reducedMotion = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-    // 鏡頭狀態全部在建構子就有數字(選單期 render 就在跑,NaN 中毒雷)
-    this.camView = "chase";
-    try {
-      const v = typeof localStorage !== "undefined" ? localStorage.getItem(CAM_KEY) : null;
-      if (v && CAM_VIEWS.includes(v)) this.camView = v;
-    } catch { /* ignore */ }
-    this.camPos = new THREE.Vector3(0, 12, -40);
-    this.camLook = new THREE.Vector3(0, 0, 0);
-    this.camUp = new THREE.Vector3(0, 1, 0);
-    this.camFov = 60; this.camNear = 0.3;
-    this._camSnap = true; this._tvIdx = -1; this.shake = 0;
-    this._d = { pos: V(), look: V(), up: new THREE.Vector3(0, 1, 0), fov: 60, near: 0.3, kPos: 1, kLook: 1, kUp: 1, hard: false };
+    // 鏡頭狀態全部在建構子就有數字(選單期 render 就在跑,NaN 中毒雷)。
+    // 每個視窗一份 cam state(雙人同機=兩份);this.camera/camPos/camView… 是 cams[0] 的相容別名(getter)。
+    const savedView = (key, fallback) => { try { const v = typeof localStorage !== "undefined" ? localStorage.getItem(key) : null; return v && CAM_VIEWS.includes(v) ? v : fallback; } catch { return fallback; } };
+    this.cams = [this._makeCamState(savedView(CAM_KEY, "chase")), this._makeCamState(savedView(CAM_KEY + "-p2", "chase"))];
     this._v1 = V(); this._v2 = V(); this._v3 = V(); this._v4 = V();
-    this._chaseDir = new THREE.Vector3(0, 0, 1);   // 追尾鏡頭的平滑方向(位置本身不 lerp)
     this._q = new THREE.Quaternion(); this._e = new THREE.Euler();
+    this._vw = 1280; this._vh = 720;
 
-    this.camera = new THREE.PerspectiveCamera(60, 16 / 9, 0.3, 4000);
     this.renderer = null;
     if (!this.headless) {
       this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: "high-performance" });
@@ -76,8 +76,34 @@ export class RacingGame {
     }
     this.scene = null; this.track = null; this.tvSpots = [];
     this.setTrack(this.settings.trackId);
-    this._camSnap = true;
+    this._snapCams();
   }
+
+  _makeCamState(view) {
+    return {
+      view, forceTv: false, snap: true, tvIdx: -1, shake: 0,
+      pos: new THREE.Vector3(0, 12, -40), look: new THREE.Vector3(0, 0, 0), up: new THREE.Vector3(0, 1, 0), fov: 60,
+      chaseDir: new THREE.Vector3(0, 0, 1),   // 追尾鏡頭的平滑方向(位置本身不 lerp)
+      d: { pos: V(), look: V(), up: new THREE.Vector3(0, 1, 0), fov: 60, near: 0.3, kPos: 1, kLook: 1, kUp: 1, hard: false },
+      camera: new THREE.PerspectiveCamera(60, 16 / 9, 0.3, 4000),
+    };
+  }
+  _snapCams() { for (const c of this.cams) c.snap = true; }
+  /* 相容別名(測試與舊呼叫都用這幾個名字) */
+  get camera() { return this.cams[0].camera; }
+  get camPos() { return this.cams[0].pos; }
+  get camLook() { return this.cams[0].look; }
+  get camUp() { return this.cams[0].up; }
+  get camFov() { return this.cams[0].fov; }
+  get camView() { return this.cams[0].view; }
+  set camView(v) { this.cams[0].view = v; }
+  get shake() { return this.cams[0].shake; }
+  set shake(v) { this.cams[0].shake = v; }
+  /** 單閘門:是不是雙人同機(選單期只有一台展示車 ⇒ false)。 */
+  is2P() { return this.settings.mode === "duel2p" && this.players.length === 2; }
+  /** 玩家的「AI 輕扶回中」強度(選單開關 × 難度預設)。 */
+  assistStrength() { return assistStrength(DIFFICULTY[this.settings.difficulty] || DIFFICULTY.easy, this.settings.assist); }
+  _pName(car) { return this.is2P() ? (car.playerIdx === 1 ? "P2" : "P1") : "你"; }
 
   /* ───────────────────────── 世界 ───────────────────────── */
 
@@ -87,11 +113,11 @@ export class RacingGame {
     this.settings.trackId = id;
     this.track = buildTrack(TRACKS[id]);
     this.tvSpots = tvCameraSpots(this.track, 150);
-    this._tvIdx = -1;
+    for (const c of this.cams) c.tvIdx = -1;
     this._clearCars();
     this._buildWorld();
     if (this.phase === "menu") this._placeMenuCar();
-    this._camSnap = true;
+    this._snapCams();
   }
 
   _buildWorld() {
@@ -483,7 +509,7 @@ export class RacingGame {
 
   _clearCars() {
     if (this.scene) for (const rig of this.rigs.values()) this.scene.remove(rig.group);
-    this.cars = []; this.rigs.clear(); this.brains.clear(); this.player = null;
+    this.cars = []; this.rigs.clear(); this.brains.clear(); this.player = null; this.players = [];
   }
 
   _spawnCar(opts, colorHex, interior) {
@@ -497,9 +523,9 @@ export class RacingGame {
   _placeMenuCar() {
     this._clearCars();
     const t = this.track;
-    const car = this._spawnCar({ name: "你", isPlayer: true, colorIdx: this.settings.colorIdx }, CAR_COLORS[this.settings.colorIdx].hex, true);
+    const car = this._spawnCar({ name: "你", isPlayer: true, playerIdx: 0, colorIdx: this.settings.colorIdx }, CAR_COLORS[this.settings.colorIdx].hex, true);
     placeOnTrack(car, t, t.length - 6, -t.halfW * 0.45);
-    this.player = car;
+    this.player = car; this.players = [car];
     this._syncRig(car, 0);
   }
 
@@ -518,26 +544,37 @@ export class RacingGame {
     if (!AI_OPTIONS.includes(Number(next.aiCount))) next.aiCount = 3;
     next.laps = Number(next.laps); next.aiCount = Number(next.aiCount);
     next.colorIdx = ((Number(next.colorIdx) || 0) % CAR_COLORS.length + CAR_COLORS.length) % CAR_COLORS.length;
+    if (!MODES[next.mode]) next.mode = "solo";
+    if (!ASSIST_MODES.includes(next.assist)) next.assist = "auto";
+    if (!GRID_OPTIONS.includes(next.gridPos)) next.gridPos = "last";
     const trackChanged = next.trackId !== this.settings.trackId || !this.scene;
     this.settings = next;
     if (trackChanged) this.setTrack(next.trackId);
     this._clearCars();
     const t = this.track, L = t.length;
     const cfg = DIFFICULTY[next.difficulty];
-    const player = this._spawnCar({ name: "你", isPlayer: true, colorIdx: next.colorIdx }, CAR_COLORS[next.colorIdx].hex, true);
-    this.player = player;
-    const others = CAR_COLORS.map((_, i) => i).filter((i) => i !== next.colorIdx);
+    const two = next.mode === "duel2p";
+    // 人類車手:單人=選的車色;雙人=鐵則色 P1 藍 / P2 紅(車色選單在雙人模式不生效)
+    const p1Color = two ? P1_COLOR : next.colorIdx;
+    const p1 = this._spawnCar({ name: two ? "P1" : "你", isPlayer: true, playerIdx: 0, colorIdx: p1Color }, CAR_COLORS[p1Color].hex, true);
+    this.player = p1; this.players = [p1];
+    if (two) this.players.push(this._spawnCar({ name: "P2", isPlayer: true, playerIdx: 1, colorIdx: P2_COLOR }, CAR_COLORS[P2_COLOR].hex, true));
+    const used = new Set(this.players.map((p) => p.colorIdx));
+    const others = CAR_COLORS.map((_, i) => i).filter((i) => !used.has(i));
+    const ais = [];
     for (let i = 0; i < next.aiCount; i++) {
       const ci = others[i % others.length];
       const ai = this._spawnCar({ name: AI_NAMES[i % AI_NAMES.length], colorIdx: ci }, CAR_COLORS[ci].hex, false);
       this.brains.set(ai, makeAiBrain(0.137 + i * 0.311, cfg));
+      ais.push(ai);
     }
-    // 起跑格:兩列交錯;★玩家排最後一格(後面沒車擋追尾鏡頭,超車才好玩),獨占一排就置中
-    const nCars = this.cars.length;
-    this.cars.forEach((car, idx) => {
-      const i = car.isPlayer ? nCars - 1 : idx - 1;      // AI 佔 0..n−2,玩家佔 n−1
+    // 起跑格:兩列交錯,索引 0 = 最前格。玩家依 gridPos 排最後(預設;後面沒車擋追尾鏡頭、超車才好玩)或最前;
+    // 雙人一定同一排(P1 左 P2 右,跟分割畫面左右一致):AI 奇數台時在玩家前插一個空格,獨占一排的車置中。
+    const order = next.gridPos === "front" ? [...this.players, ...ais] : [...ais, ...(two && ais.length % 2 === 1 ? [null] : []), ...this.players];
+    order.forEach((car, i) => {
+      if (!car) return;
       const row = Math.floor(i / 2), col = i % 2;
-      const alone = i === nCars - 1 && col === 0;
+      const alone = col === 0 && (i + 1 >= order.length || order[i + 1] === null);
       const d = L - 6 - row * 7.5;
       placeOnTrack(car, t, d, alone ? 0 : (col === 0 ? -1 : 1) * t.halfW * 0.45);
       car.progress = -(L - d);
@@ -546,10 +583,12 @@ export class RacingGame {
     });
     this.phase = "countdown";
     this.countdownT = COUNTDOWN_SECONDS; this._cdLast = 99;
-    this.raceT = 0; this.finishOrder = []; this.results = null; this._allAiDoneT = 0;
-    this.input = emptyInput();
-    this.say("預備……", 2);
-    this._camSnap = true;
+    this.raceT = 0; this.finishOrder = []; this.results = null; this._allAiDoneT = 0; this._allAiDoneSaid = false;
+    this.input = emptyInput(); this.input2 = emptyInput();
+    for (const c of this.cams) c.forceTv = false;
+    this.say(two ? "P1 左半邊、P2 右半邊,預備……" : "預備……", 2);
+    this._snapCams();
+    this._updateAspect();
     this._emit("racestart", { settings: { ...this.settings } });
     this.pushHud();
   }
@@ -558,16 +597,19 @@ export class RacingGame {
     this.phase = "menu";
     this.results = null;
     this._placeMenuCar();
-    this._camSnap = true;
+    this._snapCams();
+    this._updateAspect();
     this.pushHud();
   }
 
-  requestRescue() {
-    if (!this.player || this.phase !== "racing") return;
-    rescue(this.player, this.track);
-    this._syncRig(this.player, 0);
-    this.say("放回賽道了,加油!", 2);
-    this._emit("rescue", {});
+  /** 手動放回賽道(idx=0 P1、1 P2)。 */
+  requestRescue(idx = 0) {
+    const car = this.players[idx];
+    if (!car || this.phase !== "racing" || car.finished) return;
+    rescue(car, this.track);
+    this._syncRig(car, 0);
+    this.say(this.is2P() ? `${this._pName(car)} 放回賽道了,加油!` : "放回賽道了,加油!", 2);
+    this._emit("rescue", { p: idx });
   }
 
   /* ───────────────────────── 迴圈 ───────────────────────── */
@@ -590,14 +632,47 @@ export class RacingGame {
   stop() { this.running = false; }
 
   resize(width, height) {
-    if (!this.renderer) return;
-    this.renderer.setSize(width, height, false);
-    this.camera.aspect = width / Math.max(1, height);
-    this.camera.updateProjectionMatrix();
+    this._vw = Math.max(1, width | 0); this._vh = Math.max(1, height | 0);
+    if (this.renderer) this.renderer.setSize(this._vw, this._vh, false);
+    this._updateAspect();
   }
 
+  /** 兩個鏡頭的長寬比:單人=整個畫面;雙人=各半(左右分割)。 */
+  _updateAspect() {
+    const w = this.is2P() ? this._vw / 2 : this._vw, h = Math.max(1, this._vh);
+    for (const c of this.cams) { c.camera.aspect = w / h; c.camera.updateProjectionMatrix(); }
+  }
+
+  /** 雙人=同一個 scene 用 scissor 畫兩次(左 P1、右 P2);每一刀前先決定「誰的車艙要藏」(只藏該視窗車手自己的、且他選駕駛座時)。 */
   render() {
-    if (this.renderer && this.scene) this.renderer.render(this.scene, this.camera);
+    if (!this.renderer || !this.scene) return;
+    const r = this.renderer;
+    if (this.is2P()) {
+      const hw = Math.floor(this._vw / 2), h = this._vh;
+      r.setScissorTest(true);
+      for (let i = 0; i < 2; i++) {
+        this._applyCockpitHide(i);
+        r.setViewport(i * hw, 0, hw, h); r.setScissor(i * hw, 0, hw, h);
+        r.render(this.scene, this.cams[i].camera);
+      }
+      r.setScissorTest(false);
+      this._applyCockpitHide(-1);   // 還原成「各自視窗規則」(headless/測試看到的狀態)
+    } else {
+      r.setViewport(0, 0, this._vw, this._vh);
+      r.render(this.scene, this.cams[0].camera);
+    }
+  }
+
+  /** viewportIdx ≥0:那個視窗的畫面 —— 只有「該視窗車手自己選駕駛座」才藏他的車艙,對手的車艙照常顯示;
+      viewportIdx <0:每台人類車依自己視窗的視角決定(單人與 headless 的預設語意)。visible 一律嚴格 boolean。 */
+  _applyCockpitHide(viewportIdx) {
+    for (const car of this.players) {
+      const rig = this.rigs.get(car);
+      if (!rig) continue;
+      const own = !!this.cams[car.playerIdx] && this.cams[car.playerIdx].view === "cockpit" && this.phase !== "menu";
+      const hide = viewportIdx < 0 ? own : (own && viewportIdx === car.playerIdx);
+      for (const m of rig.hide) m.visible = !hide;
+    }
   }
 
   update(dt) {
@@ -620,32 +695,41 @@ export class RacingGame {
     }
 
     for (const car of this.cars) this._syncRig(car, dt);
-    this._updateCamera(dt);
+    this._updateCamera(this.cams[0], dt);
+    if (this.is2P()) this._updateCamera(this.cams[1], dt);
     this.pushHud();
   }
 
   _stepRace(dt) {
     const cfg = DIFFICULTY[this.settings.difficulty];
     const t = this.track;
+    const assist = this.assistStrength();
     for (const car of this.cars) {
       let input;
-      if (car.isPlayer && !car.finished && !this.autopilot) input = this.input;
+      if (car.isPlayer && !car.finished && !this.autopilot) input = car.playerIdx === 1 ? this.input2 : this.input;
       else {
         let brain = this.brains.get(car);
         if (!brain) { brain = makeAiBrain(0.5, cfg); this.brains.set(car, brain); }
         input = aiInput(car, brain, t, cfg, dt, this.cars, this.player);
         if (car.finished) { input.throttle = Math.min(input.throttle, 0.35); input.boost = false; }   // 完賽=慢慢繞
       }
-      const evs = stepCar(car, input, dt, cfg, t, { raceT: this.raceT });
+      // 人類車吃選單的「AI 輕扶回中」開關;AI 車照難度預設(它本來就會自己轉)
+      const evs = stepCar(car, input, dt, cfg, t, { raceT: this.raceT, assist: car.isPlayer ? assist : cfg.assist });
       for (const e of evs) this._onCarEvent(car, e);
       if (!car.finished && car.lap >= this.settings.laps) {
         car.finished = true; car.finishTime = this.raceT;
         this.finishOrder.push(car);
-        if (car.isPlayer) this._finishRace();
-        else if (this.phase === "racing") this.say(`${car.name} 完賽了!`, 2);
+        if (car.isPlayer) {
+          if (this.players.every((p) => p.finished)) this._finishRace();
+          else {
+            const other = this.players.find((p) => p !== car);
+            this.say(`${this._pName(car)} 衝線了!${this._pName(other)} 加油,跑完就好!`, 3);
+            this._emit("playerfinish", { p: car.playerIdx, rank: this.rankedCars().indexOf(car) + 1 });
+          }
+        } else if (this.phase === "racing") this.say(`${car.name} 完賽了!`, 2);
       }
     }
-    for (const e of resolveCollisions(this.cars)) if (e.car.isPlayer) { this.shake = Math.max(this.shake, 0.25); this._emit("bump", { speed: e.speed }); }
+    for (const e of resolveCollisions(this.cars)) if (e.car.isPlayer) { const cs = this.cams[e.car.playerIdx]; cs.shake = Math.max(cs.shake, 0.25); this._emit("bump", { speed: e.speed, p: e.car.playerIdx }); }
     if (this.phase === "racing" && this.player && this.settings.aiCount > 0 && this.cars.every((c) => c.isPlayer || c.finished)) {
       this._allAiDoneT += dt;
       if (this._allAiDoneT > 6 && !this._allAiDoneSaid) { this._allAiDoneSaid = true; this.say("對手都到了。慢慢來,衝過終點就好!", 4); this._emit("allaidone", {}); }
@@ -655,36 +739,51 @@ export class RacingGame {
   _onCarEvent(car, e) {
     const type = typeof e === "string" ? e : e.type;
     if (car.isPlayer) {
-      if (type === "bump") { this.shake = Math.min(1, 0.3 + (e.speed || 0) / 40); this._emit("bump", { speed: e.speed || 0 }); }
-      else if (type === "offtrack") { this.say("出界了!回到路上", 1.5); this._emit("offtrack", {}); }
-      else if (type === "ontrack") this._emit("ontrack", {});
-      else if (type === "rescue") { this.say("卡住了,放回賽道!", 2); this._emit("rescue", {}); }
-      else if (type === "wrongway") { this.say("⚠ 方向反了!請掉頭", 2.5); this._emit("wrongway", {}); }
-      else if (type === "boost") this._emit("boost", {});
-      else if (type === "boostend") this._emit("boostend", {});
+      const p = car.playerIdx, who = this.is2P() ? `${this._pName(car)} ` : "";
+      const cs = this.cams[p];
+      if (type === "bump") { cs.shake = Math.min(1, 0.3 + (e.speed || 0) / 40); this._emit("bump", { speed: e.speed || 0, p }); }
+      else if (type === "offtrack") { this.say(`${who}出界了!回到路上`, 1.5); this._emit("offtrack", { p }); }
+      else if (type === "ontrack") this._emit("ontrack", { p });
+      else if (type === "rescue") { this.say(`${who}卡住了,放回賽道!`, 2); this._emit("rescue", { p }); }
+      else if (type === "wrongway") { this.say(`⚠ ${who}方向反了!請掉頭`, 2.5); this._emit("wrongway", { p }); }
+      else if (type === "boost") this._emit("boost", { p });
+      else if (type === "boostend") this._emit("boostend", { p });
       else if (type === "lap") {
         const remain = this.settings.laps - e.lap;
-        if (remain === 1) this.say(`最後一圈!單圈 ${fmtTime(e.time)}`, 2.5);
-        else if (remain > 1) this.say(`第 ${e.lap} 圈完成 ${fmtTime(e.time)}`, 2.5);
-        this._emit("lap", { lap: e.lap, time: e.time, final: remain === 1, best: car.bestLap === e.time });
+        if (remain === 1) this.say(`${who}最後一圈!單圈 ${fmtTime(e.time)}`, 2.5);
+        else if (remain > 1) this.say(`${who}第 ${e.lap} 圈完成 ${fmtTime(e.time)}`, 2.5);
+        this._emit("lap", { lap: e.lap, time: e.time, final: remain === 1, best: car.bestLap === e.time, p });
       }
     }
   }
 
   _finishRace() {
     this.phase = "finished";
-    const rows = this.rankedCars().map((c, i) => ({
-      rank: i + 1, name: c.name, isPlayer: !!c.isPlayer, colorHex: CAR_COLORS[c.colorIdx].hex,
+    const ranked = this.rankedCars();
+    const rows = ranked.map((c, i) => ({
+      rank: i + 1, name: c.name, isPlayer: !!c.isPlayer, playerIdx: c.isPlayer ? c.playerIdx : -1, colorHex: CAR_COLORS[c.colorIdx].hex,
       time: c.finished ? c.finishTime : null, progress: c.progress, bestLap: c.bestLap || null,
     }));
-    const me = rows.find((r) => r.isPlayer);
-    const rank = me ? me.rank : 1;
-    const medal = rank === 1 ? "🥇" : rank === 2 ? "🥈" : rank === 3 ? "🥉" : "🏁";
-    const title = rank === 1 ? "冠軍!太厲害了!" : rank === 2 ? "第二名!好快!" : rank === 3 ? "第三名!有獎牌!" : `第 ${rank} 名,完賽了!`;
-    this.results = { rank, total: this.cars.length, medal, title, time: this.player.finishTime, bestLap: this.player.bestLap, laps: this.settings.laps, rows, trackLabel: this.track.label, difficulty: DIFFICULTY[this.settings.difficulty].label };
+    const medalOf = (rank) => rank === 1 ? "🥇" : rank === 2 ? "🥈" : rank === 3 ? "🥉" : "🏁";
+    const rank = ranked.indexOf(this.player) + 1;
+    let medal = medalOf(rank), title, winner = -1, rank2 = 0;
+    if (this.is2P()) {
+      const p2 = this.players[1];
+      rank2 = ranked.indexOf(p2) + 1;
+      winner = rank2 < rank ? 1 : 0;                       // 逐幀判定不會同時過線,先過線者名次小
+      medal = medalOf(Math.min(rank, rank2));
+      title = `${winner === 0 ? "P1" : "P2"} 獲勝!${this.settings.aiCount > 0 ? `(全場第 ${Math.min(rank, rank2)} 名)` : ""}`;
+    } else {
+      title = rank === 1 ? "冠軍!太厲害了!" : rank === 2 ? "第二名!好快!" : rank === 3 ? "第三名!有獎牌!" : `第 ${rank} 名,完賽了!`;
+    }
+    this.results = {
+      rank, rank2, winner, mode: this.settings.mode, total: this.cars.length, medal, title,
+      time: this.player.finishTime, time2: this.is2P() ? this.players[1].finishTime : null,
+      bestLap: this.player.bestLap, laps: this.settings.laps, rows, trackLabel: this.track.label, difficulty: DIFFICULTY[this.settings.difficulty].label,
+    };
     this.say(`${medal} ${title}`, 5);
-    if (this.camView !== "cockpit") this._forceTv = true;    // 結算自動切轉播機位看自己繞場(駕駛座視角的人維持在車裡)
-    this._camSnap = true;
+    for (const c of this.cams) if (c.view !== "cockpit") c.forceTv = true;    // 結算自動切轉播機位看自己繞場(駕駛座視角的人維持在車裡)
+    this._snapCams();
     this._emit("finish", this.results);
   }
 
@@ -717,7 +816,7 @@ export class RacingGame {
       if (w.front) w.pivot.rotation.y = -car.steer * 0.5;
     }
     rig.flame.visible = !!car.boosting;
-    const braking = car.isPlayer ? (this.input.brake > 0 && this.phase === "racing") : car.accel < -4;
+    const braking = car.isPlayer ? ((car.playerIdx === 1 ? this.input2 : this.input).brake > 0 && this.phase === "racing") : car.accel < -4;
     rig.tailMat.emissiveIntensity = braking ? 1.0 : 0.35;
     if (rig.cockpit) {
       const { wheel, needlePivot } = rig.cockpit.userData;
@@ -726,38 +825,44 @@ export class RacingGame {
       const frac = clamp(Math.abs(car.speed) / (cfg.maxSpeed * CAR.boostSpeedMul), 0, 1);
       needlePivot.rotation.z = (330 + frac * 240) * Math.PI / 180;
     }
-    // 駕駛座視角:藏車艙/窗/駕駛頭(只對玩家車);其他車照常
-    const cockpitNow = this.camView === "cockpit" && car.isPlayer && this.phase !== "menu";
+    // 駕駛座視角:藏車艙/窗/駕駛頭(只對人類車、且他自己的視窗選駕駛座);其他車照常。雙人渲染時 render() 每一刀再覆寫。
+    const cockpitNow = car.isPlayer && this.phase !== "menu" && !!this.cams[car.playerIdx] && this.cams[car.playerIdx].view === "cockpit";
     for (const m of rig.hide) m.visible = !cockpitNow;
   }
 
   /* ───────────────────────── 鏡頭 ───────────────────────── */
 
-  setCamView(id) {
-    if (!CAM_VIEWS.includes(id)) return;
-    this.camView = id;
-    this._forceTv = false;
-    this._camSnap = true;                       // 切視角=硬切(subtitle-camera-kit 式一)
-    try { if (typeof localStorage !== "undefined") localStorage.setItem(CAM_KEY, id); } catch { /* ignore */ }
-    this._emit("view", { id, label: CAM_LABELS[id] });
+  /** 切視角(idx=0 P1 視窗、1 P2 視窗)。 */
+  setCamView(id, idx = 0) {
+    if (!CAM_VIEWS.includes(id) || !this.cams[idx]) return;
+    const cs = this.cams[idx];
+    cs.view = id;
+    cs.forceTv = false;
+    cs.snap = true;                       // 切視角=硬切(subtitle-camera-kit 式一)
+    try { if (typeof localStorage !== "undefined") localStorage.setItem(idx === 0 ? CAM_KEY : CAM_KEY + "-p2", id); } catch { /* ignore */ }
+    this._emit("view", { id, label: CAM_LABELS[id], p: idx });
     this.pushHud();
   }
 
-  cycleCamView() {
-    const i = CAM_VIEWS.indexOf(this.camView);
-    this.setCamView(CAM_VIEWS[(i + 1) % CAM_VIEWS.length]);
+  cycleCamView(idx = 0) {
+    const cs = this.cams[idx] || this.cams[0];
+    const i = CAM_VIEWS.indexOf(cs.view);
+    this.setCamView(CAM_VIEWS[(i + 1) % CAM_VIEWS.length], this.cams[idx] ? idx : 0);
   }
 
-  /** 目前實際用的視角(結算時自動轉播機位)。 */
-  activeView() {
+  /** 目前實際用的視角(結算時自動轉播機位);idx=視窗。 */
+  activeView(idx = 0) {
+    const cs = this.cams[idx] || this.cams[0];
     if (this.phase === "menu") return "menu";
-    if (this.phase === "finished" && this._forceTv) return "tv";
-    return this.camView;
+    if (this.phase === "finished" && cs.forceTv) return "tv";
+    return cs.view;
   }
 
-  _desiredCamera(d, dt = 1 / 60) {
-    const car = this.player;
-    const view = this.activeView();
+  _desiredCamera(cs, dt = 1 / 60) {
+    const d = cs.d;
+    const idx = this.cams.indexOf(cs);
+    const car = this.players[idx] || this.player;
+    const view = this.activeView(idx);
     d.hard = false; d.near = 0.3; d.kPos = 1 - Math.exp(-0.016 * 7); d.kLook = 1 - Math.exp(-0.016 * 7); d.kUp = 1 - Math.exp(-0.016 * 3);
     d.up.set(0, 1, 0);
     if (!car || view === "menu") {
@@ -770,15 +875,15 @@ export class RacingGame {
     }
     const rig = this.rigs.get(car);
     const f = forwardOf(car.heading);
-    const speedFrac = clamp(Math.abs(car.speed) / 34, 0, 1.2);
+    const speedFrac = clamp(Math.abs(car.speed) / 44, 0, 1.2);   // 0906 極速提高:基準 34→44(標準檔極速)
     const pump = this.reducedMotion ? 0 : speedFrac;
     const cx = car.x, cy = car.y, cz = car.z;
     if (view === "chase") {
       // 方向平滑、位置剛性:車永遠在畫面同一個位置,轉彎/甩尾時鏡頭慢半拍有速度感
       this._v4.set(f.x, 0, f.z);
-      if (this._camSnap) this._chaseDir.copy(this._v4);
-      else this._chaseDir.lerp(this._v4, 1 - Math.exp(-dt * 4)).normalize();
-      const dir = this._chaseDir;
+      if (cs.snap) cs.chaseDir.copy(this._v4);
+      else cs.chaseDir.lerp(this._v4, 1 - Math.exp(-dt * 4)).normalize();
+      const dir = cs.chaseDir;
       const back = 7.4 + pump * 1.6;
       d.pos.set(cx - dir.x * back, cy + 2.7 + pump * 0.3, cz - dir.z * back);
       d.look.set(cx + dir.x * 5, cy + 1.05, cz + dir.z * 5);
@@ -811,13 +916,13 @@ export class RacingGame {
       d.fov = 55; d.kPos = 1 - Math.exp(-0.016 * 3.5); d.kLook = d.kPos; d.kUp = 1 - Math.exp(-0.016 * 2.5);
     } else { // tv
       const spots = this.tvSpots;
-      let best = this._tvIdx, bestD = Infinity;
+      let best = cs.tvIdx, bestD = Infinity;
       if (best >= 0) bestD = Math.hypot(spots[best].x - cx, spots[best].z - cz);
       for (let i = 0; i < spots.length; i++) {
         const dd = Math.hypot(spots[i].x - cx, spots[i].z - cz);
         if (dd < bestD * 0.85) { bestD = dd; best = i; }
       }
-      if (best !== this._tvIdx) { this._tvIdx = best; d.hard = true; }
+      if (best !== cs.tvIdx) { cs.tvIdx = best; d.hard = true; }
       const s = spots[best];
       d.pos.set(s.x, s.y, s.z);
       d.look.set(cx, cy + 0.9, cz);
@@ -826,30 +931,30 @@ export class RacingGame {
     }
   }
 
-  _updateCamera(dt) {
-    const d = this._d;
-    this._desiredCamera(d, dt);
-    if (this._camSnap || d.hard) {
-      this.camPos.copy(d.pos); this.camLook.copy(d.look); this.camUp.copy(d.up); this.camFov = d.fov;
-      this._camSnap = false;
+  _updateCamera(cs, dt) {
+    const d = cs.d, cam = cs.camera;
+    this._desiredCamera(cs, dt);
+    if (cs.snap || d.hard) {
+      cs.pos.copy(d.pos); cs.look.copy(d.look); cs.up.copy(d.up); cs.fov = d.fov;
+      cs.snap = false;
     } else {
       // dt 修正的 lerp 係數(d.k* 是以 1/60 為基準)
       const fix = (k) => 1 - Math.pow(1 - k, dt * 60);
-      this.camPos.lerp(d.pos, fix(d.kPos));
-      this.camLook.lerp(d.look, fix(d.kLook));
-      this.camUp.lerp(d.up, fix(d.kUp)).normalize();
-      this.camFov += (d.fov - this.camFov) * fix(0.08);
+      cs.pos.lerp(d.pos, fix(d.kPos));
+      cs.look.lerp(d.look, fix(d.kLook));
+      cs.up.lerp(d.up, fix(d.kUp)).normalize();
+      cs.fov += (d.fov - cs.fov) * fix(0.08);
     }
-    this.camera.position.copy(this.camPos);
-    if (this.shake > 0 && !this.reducedMotion && this.activeView() !== "cockpit") {
-      this.camera.position.x += (Math.random() - 0.5) * this.shake * 0.35;
-      this.camera.position.y += (Math.random() - 0.5) * this.shake * 0.25;
+    cam.position.copy(cs.pos);
+    if (cs.shake > 0 && !this.reducedMotion && this.activeView(this.cams.indexOf(cs)) !== "cockpit") {
+      cam.position.x += (Math.random() - 0.5) * cs.shake * 0.35;
+      cam.position.y += (Math.random() - 0.5) * cs.shake * 0.25;
     }
-    this.shake = Math.max(0, this.shake - dt * 2.5);
-    this.camera.up.copy(this.camUp);
-    this.camera.lookAt(this.camLook);
-    if (Math.abs(this.camera.fov - this.camFov) > 0.05 || this.camera.near !== d.near) {
-      this.camera.fov = this.camFov; this.camera.near = d.near; this.camera.updateProjectionMatrix();
+    cs.shake = Math.max(0, cs.shake - dt * 2.5);
+    cam.up.copy(cs.up);
+    cam.lookAt(cs.look);
+    if (Math.abs(cam.fov - cs.fov) > 0.05 || cam.near !== d.near) {
+      cam.fov = cs.fov; cam.near = d.near; cam.updateProjectionMatrix();
     }
   }
 
@@ -861,13 +966,29 @@ export class RacingGame {
 
   pushHud() { if (this.onHud) this.onHud(this.hud()); }
 
+  /** 第二車手的 HUD 小包(雙人才有;null=單人)。 */
+  _hudP2(ranked) {
+    if (!this.is2P()) return null;
+    const p = this.players[1], cfg = DIFFICULTY[this.settings.difficulty] || DIFFICULTY.easy;
+    return {
+      speedKmh: kmh(p.speed), rpm: rpm01(p.speed, cfg.maxSpeed),
+      lap: Math.min(this.settings.laps, Math.max(1, p.lap + 1)), rank: ranked.indexOf(p) + 1,
+      turbo: p.turbo, tired: !!p.tired, boosting: !!p.boosting, finished: !!p.finished,
+      lapT: p.finished ? (p.lapTimes[p.lapTimes.length - 1] || 0) : Math.max(0, this.raceT - p.lapStartT), bestLap: p.bestLap,
+      wrongWay: !!p.wrongWay, offTrack: !!p.offTrack,
+      camView: this.cams[1].view, camLabel: CAM_LABELS[this.cams[1].view], activeView: this.activeView(1),
+    };
+  }
+
   hud() {
     const p = this.player;
     const cfg = DIFFICULTY[this.settings.difficulty] || DIFFICULTY.easy;
     const ranked = this.phase === "racing" || this.phase === "finished" ? this.rankedCars() : this.cars;
     const rank = p ? ranked.indexOf(p) + 1 : 1;
     return {
-      phase: this.phase,
+      phase: this.phase, mode: this.settings.mode, two: this.is2P(),
+      assist: this.assistStrength(),
+      p2: this._hudP2(ranked),
       countdown: this.phase === "countdown" ? Math.ceil(this.countdownT) : 0,
       speedKmh: p ? kmh(p.speed) : 0,
       rpm: p ? rpm01(p.speed, cfg.maxSpeed) : 0,
@@ -879,11 +1000,11 @@ export class RacingGame {
       lapT: p ? (p.finished ? (p.lapTimes[p.lapTimes.length - 1] || 0) : Math.max(0, this.raceT - p.lapStartT)) : 0,
       bestLap: p ? p.bestLap : 0,
       wrongWay: !!(p && p.wrongWay), offTrack: !!(p && p.offTrack),
-      camView: this.camView, camLabel: CAM_LABELS[this.camView], activeView: this.activeView(),
+      camView: this.cams[0].view, camLabel: CAM_LABELS[this.cams[0].view], activeView: this.activeView(0),
       message: this.message,
       results: this.results,
       trackLabel: this.track ? this.track.label : "",
-      cars: this.cars.map((c) => ({ x: c.x, z: c.z, isPlayer: !!c.isPlayer, colorHex: CAR_COLORS[c.colorIdx].hex, finished: !!c.finished })),
+      cars: this.cars.map((c) => ({ x: c.x, z: c.z, isPlayer: !!c.isPlayer, playerIdx: c.isPlayer ? c.playerIdx : -1, colorHex: CAR_COLORS[c.colorIdx].hex, finished: !!c.finished })),
     };
   }
 }

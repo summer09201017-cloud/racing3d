@@ -11,6 +11,7 @@
   <body>
     <main class="app-shell">
       <canvas id="gameCanvas" aria-label="3D 賽車遊戲畫面"></canvas>
+      <div class="seam" id="seam" hidden aria-hidden="true"></div>
 
       <!-- 直向蓋版提示(force-landscape-pwa) -->
       <div id="rotate" class="rotate-hint" aria-hidden="true">
@@ -18,11 +19,16 @@
         <p>請把手機轉成<b>橫向</b>來玩<br /><span>轉成橫向會自動全螢幕</span></p>
       </div>
 
-      <!-- 比賽 HUD(左上:圈數/名次;右上:小地圖;右下:速度表+渦輪;中央:倒數/逆向) -->
+      <!-- 比賽 HUD(左上:圈數/名次;右上:小地圖;右下:速度表+渦輪;中央:倒數/逆向)。雙人:左半 P1 藍、右半 P2 紅 -->
       <div class="race-card" id="raceCard" hidden>
         <div class="race-line big"><span id="lapText">第 1 / 3 圈</span></div>
         <div class="race-line"><span id="rankText">第 1 名 / 4</span></div>
         <div class="race-line small"><span id="timeText">0:00.0</span>・單圈 <span id="lapTimeText">0:00.0</span>・最佳 <span id="bestText">--:--.-</span></div>
+      </div>
+      <div class="race-card p2" id="raceCard2" hidden>
+        <div class="race-line big"><span id="lapText2">P2・第 1 / 3 圈</span></div>
+        <div class="race-line"><span id="rankText2">第 1 名 / 4</span></div>
+        <div class="race-line small"><span id="timeText2">0:00.0</span>・單圈 <span id="lapTimeText2">0:00.0</span>・最佳 <span id="bestText2">--:--.-</span></div>
       </div>
 
       <div class="mini-wrap" id="miniWrap" hidden>
@@ -38,12 +44,20 @@
         </div>
         <div class="speed-hint" id="speedHint">↑ 油門・↓ 煞車・← → 轉向・Shift 渦輪・V 視角・R 回賽道</div>
       </div>
+      <div class="speed-panel p2" id="speedPanel2" hidden>
+        <div class="speed-num"><span id="speedText2">0</span><small>km/h</small></div>
+        <div class="turbo-row" id="turboRow2">
+          <span class="turbo-label">⚡ 渦輪</span>
+          <div class="turbo-track"><div class="turbo-fill" id="turboFill2"></div></div>
+        </div>
+        <div class="speed-hint" id="speedHint2">↑ 油門・↓ 煞車・← → 轉向・右Shift 渦輪・0 視角・Backspace 回賽道</div>
+      </div>
 
       <div class="countdown" id="countdown" hidden>3</div>
       <div class="wrong-way" id="wrongWay" hidden>⚠ 方向反了!請掉頭</div>
-      <div class="message-ribbon" id="statusMessage">選好賽道、圈數與難度,按「開始比賽」。</div>
+      <div class="message-ribbon" id="statusMessage">選好模式、賽道、圈數與難度,按「開始比賽」。</div>
 
-      <!-- 觸控(只在觸控裝置顯示):左下轉向、右下油門/煞車/渦輪 -->
+      <!-- 觸控(只在觸控裝置顯示;雙人模式隱藏):左下轉向、右下油門/煞車/渦輪 -->
       <div class="touch-controls" id="touchControls">
         <div class="touch-left">
           <button id="tLeft" class="touch-btn">◀</button>
@@ -60,7 +74,9 @@
         <button id="menuButton">選單</button>
         <button id="audioButton">音效開啟</button>
         <button id="cameraButton">視角</button>
+        <button id="cameraButton2" hidden>視角 P2</button>
         <button id="rescueButton" hidden>回賽道</button>
+        <button id="rescueButton2" hidden>回賽道 P2</button>
         <button id="helpButton">玩法</button>
         <button id="fsButton" aria-label="全螢幕">⛶</button>
       </div>
@@ -72,8 +88,10 @@
           <h2>🏎️ 怎麼玩</h2>
           <div class="help-body">
             <div>🕹️ <b>開車</b>:<b>↑ / W</b> 油門、<b>↓ / S</b> 煞車(停住後繼續按=倒車)、<b>← → / A D</b> 轉向。<b>Shift</b> 渦輪加速(右下角 ⚡ 條,用完要等它回到三成才能再衝)、<b>空白鍵</b> 手煞甩尾。手機:左下 ◀▶ 轉向、右下 油門/煞車/⚡。也支援 Xbox/USB 手把(A 油門、B 煞車、X 渦輪、Y 視角)。</div>
-            <div>📷 <b>視角</b>:<b>V</b> 或「視角」鈕循環五檔:<b>追尾跟隨 → 車頭 → 駕駛座(第一人稱,方向盤會跟著轉、儀表指針跟著速度)→ 高空俯瞰 → 轉播機位</b>。數字鍵 <b>1~5</b> 直接跳。選擇會記住。</div>
-            <div>🏁 <b>比賽</b>:倒數 3、2、1、GO!跑完設定的圈數就完賽,名次看誰先過終點線。地上<b>黃底黑箭頭</b>=前面有急彎,先煞車再轉。</div>
+            <div>👫 <b>雙人同機</b>(選單「模式」):畫面左右分割,一副鍵盤兩個人。<b>P1(藍,左半)</b>:W/S/A/D、<b>左 Shift</b> 渦輪、空白鍵 手煞、V 視角、R 回賽道。<b>P2(紅,右半)</b>:↑/↓/←/→、<b>右 Shift</b> 渦輪、<b>Enter</b> 手煞、<b>0</b> 視角、<b>Backspace</b> 回賽道。兩個人都過線才結算,先過線的名次高。</div>
+            <div>📷 <b>視角</b>:<b>V</b> 或「視角」鈕循環五檔:<b>追尾跟隨 → 車頭 → 駕駛座(第一人稱,方向盤會跟著轉、儀表指針跟著速度)→ 高空俯瞰 → 轉播機位</b>。數字鍵 <b>1~5</b> 直接跳。選擇會記住(P2 用 0 循環)。</div>
+            <div>🤖 <b>AI 輕扶回中</b>(選單「輔助」):快貼到路邊時 AI 會輕輕把車拉回路中間,你自己在打方向它就少介入。<b>任何難度都能開</b>,職業檔也可以;「自動」=幼兒/兒童/入門才開。</div>
+            <div>🏁 <b>比賽</b>:倒數 3、2、1、GO!跑完設定的圈數就完賽,名次看誰先過終點線。地上<b>黃底黑箭頭</b>=前面有急彎,先煞車再轉。「起跑格」可以選排最後(從後面往前超車最好玩)或最前排。</div>
             <div class="rule">🤗 <b>溫柔規則</b>:撞牆只會彈開掉速,不會翻車;開到草地會變慢;卡住 2.5 秒會自動放回賽道(或按 <b>R</b> / 「回賽道」)。開反方向會提醒你掉頭。人人跑得完,結算都有獎牌。</div>
           </div>
           <div class="overlay-actions">
@@ -98,11 +116,14 @@
 
       <div class="home-screen visible" id="homeScreen">
         <div class="home-card">
-          <p class="home-eyebrow">RACING 3D・五檔視角</p>
+          <p class="home-eyebrow">RACING 3D・五檔視角・雙人同機</p>
           <h1>🏎️ 3D 賽車</h1>
-          <p class="home-sub">追尾、車頭、<b>駕駛座第一人稱</b>、高空俯瞰、轉播機位——邊開邊切視角,坐進車裡開!</p>
+          <p class="home-sub">追尾、車頭、<b>駕駛座第一人稱</b>、高空俯瞰、轉播機位——邊開邊切視角,坐進車裡開!兩個人可以<b>分割畫面</b>一起比。</p>
 
           <div class="home-row">
+            <label>模式
+              <select id="modeSelect"></select>
+            </label>
             <label>賽道
               <select id="trackSelect"></select>
             </label>
@@ -115,10 +136,16 @@
             <label>難度
               <select id="difficultySelect"></select>
             </label>
-            <label>車色
+            <label>AI 輕扶回中
+              <select id="assistSelect"></select>
+            </label>
+            <label>起跑格
+              <select id="gridSelect"></select>
+            </label>
+            <label id="colorLabel">車色
               <select id="colorSelect"></select>
             </label>
-            <label>音效
+            <label>音效與播報
               <select id="audioSelect">
                 <option value="on" selected>開啟</option>
                 <option value="off">靜音</option>
@@ -126,8 +153,8 @@
             </label>
           </div>
 
-          <p class="home-hint">↑ 油門、↓ 煞車、← → 轉向、Shift 渦輪、空白鍵手煞;<b>V 切視角</b>(或數字鍵 1~5)。幼兒檔會輕輕幫你把車拉回路中間;撞牆不會翻、卡住會自動放回賽道。</p>
-          <p class="home-hint ver-tag" id="verTag">版本 v1(2026-09-05)・首發:三條賽道(草原/沙漠/雪山)、五檔視角含駕駛座第一人稱(方向盤/儀表跟著動)、AI 對手 0~5 台、難度五檔、渦輪、溫柔規則。</p>
+          <p class="home-hint">↑ 油門、↓ 煞車、← → 轉向、Shift 渦輪、空白鍵手煞;<b>V 切視角</b>(或數字鍵 1~5)。「AI 輕扶回中」開了會輕輕把車拉回路中間,任何難度都能開;撞牆不會翻、卡住會自動放回賽道。雙人同機:P1 用 WASD、P2 用方向鍵(詳見「玩法」)。</p>
+          <p class="home-hint ver-tag" id="verTag">版本 v2(2026-09-06)・極速提高(幼兒 86 → 職業 180 km/h)、「AI 輕扶回中」開關(所有難度可開)、起跑格可選、人聲播報(雲哲:預備/倒數/最後一圈/衝線)、雙人同機分割畫面。v1(09-05)首發:三條賽道、五檔視角含駕駛座、AI 對手、溫柔規則。</p>
           <button class="start-button" id="startButton">開始比賽</button>
         </div>
       </div>

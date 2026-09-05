@@ -9,10 +9,10 @@ export const CAR = {
   length: 4.2, width: 1.9, wheelRadius: 0.36,
   turnRate: 2.3,          // rad/s(滿舵、低速)
   steerFullSpeed: 4,      // 低於此速度轉向率隨速度線性縮(停著不能原地打轉)
-  highSpeedFalloff: 24,   // 高速轉向變鈍:mul = 1/(1+(v/falloff)^2*0.7)
-  drag: 0.0032,           // 二次空阻(m/s² per (m/s)²)
+  highSpeedFalloff: 30,   // 高速轉向變鈍:mul = 1/(1+(v/falloff)^2*0.7)(0906 極速提高 ⇒ 24→30,50 m/s 時仍有 0.34 轉向)
+  drag: 0.0024,           // 二次空阻(m/s² per (m/s)²)(0906:0.0032→0.0024,否則職業檔加速到不了新極速;試算見 CLAUDE.md)
   roll: 0.7,              // 滾動阻力 m/s²
-  brake: 15,              // 煞車減速 m/s²
+  brake: 17,              // 煞車減速 m/s²(0906 極速提高 ⇒ 15→17,職業檔 180 km/h 仍 <3 秒煞停)
   reverseMax: 7,
   grassSpeedMul: 0.55,    // 出界最高速倍率
   grassDrag: 3.2,         // 出界額外減速 m/s²
@@ -27,14 +27,29 @@ export const CAR = {
 };
 
 /* 難度五檔(3d-game-kit「量值可調」):玩家極速/加速、AI 極速與技巧、幼兒輔助、抓地。
-   speed 單位 m/s(×3.6 = km/h):kids 20 m/s=72 km/h,hard 38 m/s=137 km/h。 */
+   speed 單位 m/s(×3.6 = km/h)。0906 使用者要「極速更高」:kids 24 m/s=86 km/h … hard 50 m/s=180 km/h
+   (每檔加速也跟著加,不然到不了極速;drag 同步 0.0032→0.0024,試算見 CLAUDE.md「極速調校」)。
+   assist = 該檔預設的「AI 輕扶回中」強度(0906:kids 0.6→0.85 更保母、child 0.4→0.55);玩家可用選單開關覆寫(assistStrength)。 */
 export const DIFFICULTY = {
-  kids:   { id: "kids",   label: "幼兒", maxSpeed: 20, accel: 9,    grip: 9,   assist: 0.6, aiMax: 15,   aiLatAcc: 6,  aiSkill: 0.45, aiBoost: 0.05 },
-  child:  { id: "child",  label: "兒童", maxSpeed: 25, accel: 10,   grip: 8,   assist: 0.4, aiMax: 20,   aiLatAcc: 7,  aiSkill: 0.6,  aiBoost: 0.15 },
-  easy:   { id: "easy",   label: "入門", maxSpeed: 30, accel: 11,   grip: 7,   assist: 0.2, aiMax: 26,   aiLatAcc: 8,  aiSkill: 0.75, aiBoost: 0.3 },
-  normal: { id: "normal", label: "標準", maxSpeed: 34, accel: 12,   grip: 6.5, assist: 0,   aiMax: 31,   aiLatAcc: 9.5, aiSkill: 0.88, aiBoost: 0.5 },
-  hard:   { id: "hard",   label: "職業", maxSpeed: 38, accel: 13,   grip: 6,   assist: 0,   aiMax: 36.5, aiLatAcc: 11, aiSkill: 0.97, aiBoost: 0.7 },
+  kids:   { id: "kids",   label: "幼兒", maxSpeed: 24, accel: 10,   grip: 9,   assist: 0.85, aiMax: 22,   aiLatAcc: 6,   aiSkill: 0.45, aiBoost: 0.05 },
+  child:  { id: "child",  label: "兒童", maxSpeed: 30, accel: 12,   grip: 8,   assist: 0.55, aiMax: 27,   aiLatAcc: 7.5, aiSkill: 0.6,  aiBoost: 0.15 },
+  easy:   { id: "easy",   label: "入門", maxSpeed: 37, accel: 14,   grip: 7,   assist: 0.3,  aiMax: 33,   aiLatAcc: 9,   aiSkill: 0.75, aiBoost: 0.3 },
+  normal: { id: "normal", label: "標準", maxSpeed: 44, accel: 16,   grip: 6.5, assist: 0,    aiMax: 40,   aiLatAcc: 11,  aiSkill: 0.88, aiBoost: 0.5 },
+  hard:   { id: "hard",   label: "職業", maxSpeed: 50, accel: 18,   grip: 6,   assist: 0,    aiMax: 48,   aiLatAcc: 13,  aiSkill: 0.97, aiBoost: 0.7 },
 };
+
+/* 「AI 輕扶回中」開關(0906 使用者拍板:所有難度都可以開,職業也可能想要):
+   auto=照難度預設(幼兒/兒童/入門有、標準/職業無);on=一定有(至少 ASSIST_ON_MIN,輕輕的);off=完全自己開。 */
+/* 輔助的 PD 參數(量值可調):dead=半寬的幾成內完全不介入、kP 拉回力、kD 煞住衝過頭。 */
+export const ASSIST = { dead: 0.45, kP: 2.2, kD: 0.9 };
+export const ASSIST_MODES = ["auto", "on", "off"];
+export const ASSIST_LABELS = { auto: "自動(幼兒/兒童/入門才開)", on: "開:AI 輕輕扶回路中間", off: "關:完全自己開" };
+export const ASSIST_ON_MIN = 0.35;
+export function assistStrength(cfg, mode = "auto") {
+  if (mode === "off") return 0;
+  if (mode === "on") return Math.max(cfg.assist || 0, ASSIST_ON_MIN);
+  return cfg.assist || 0;
+}
 
 export const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 export const wrapAngle = (a) => Math.atan2(Math.sin(a), Math.cos(a));
@@ -46,9 +61,9 @@ export function emptyInput() {
 }
 
 /** 建一台車的狀態(全數字初值=NaN 疫苗)。 */
-export function createCar({ x = 0, z = 0, heading = 0, y = 0, name = "車手", isPlayer = false, colorIdx = 0 } = {}) {
+export function createCar({ x = 0, z = 0, heading = 0, y = 0, name = "車手", isPlayer = false, playerIdx = 0, colorIdx = 0 } = {}) {
   return {
-    name, isPlayer, colorIdx,
+    name, isPlayer, playerIdx, colorIdx,
     x, y, z, heading,
     speed: 0,        // 前進速度(可負=倒車)
     lat: 0,          // 橫向滑移速度(+右)
@@ -57,7 +72,7 @@ export function createCar({ x = 0, z = 0, heading = 0, y = 0, name = "車手", i
     accel: 0,        // 這幀的縱向加速度(給視覺俯仰)
     latAcc: 0,       // 這幀的橫向加速度(給視覺側傾)
     turbo: 1, tired: false, boosting: false,
-    trackIdx: -1, trackDist: 0, lateral: 0, progress: 0, lap: 0,
+    trackIdx: -1, trackDist: 0, lateral: 0, latRate: 0, progress: 0, lap: 0,
     offTrack: false, wrongWay: false, wrongT: 0, stuckT: 0, bumpT: 0,
     finished: false, finishTime: 0, lapTimes: [], lapStartT: 0, bestLap: 0,
     slopePitch: 0,
@@ -70,7 +85,7 @@ export function placeOnTrack(car, track, dist, lateral = 0) {
   const p = pointAtOffset(track, dist, lateral);
   car.x = p.x; car.z = p.z; car.y = p.y;
   car.heading = p.heading;
-  car.speed = 0; car.lat = 0; car.steer = 0; car.yawRate = 0;
+  car.speed = 0; car.lat = 0; car.steer = 0; car.yawRate = 0; car.latRate = 0;
   const n = nearest(track, car.x, car.z, -1);
   car.trackIdx = n.idx; car.trackDist = n.dist; car.lateral = n.lateral;
   car.offTrack = false; car.wrongWay = false; car.wrongT = 0; car.stuckT = 0;
@@ -78,20 +93,26 @@ export function placeOnTrack(car, track, dist, lateral = 0) {
 
 /**
  * 推進一幀。回傳事件陣列(bump / offtrack / ontrack / rescue / wrongway / boost / boostend)。
- * cfg = DIFFICULTY[x];track = buildTrack(...)。
+ * cfg = DIFFICULTY[x];track = buildTrack(...);opts.assist 覆寫輔助強度(未給=cfg.assist;玩家開關走這裡)。
  */
 export function stepCar(car, input, dt, cfg, track, opts = {}) {
   const events = [];
   if (dt <= 0) return events;
   const L = track.length;
 
-  // ── 轉向平滑 + 幼兒輔助(離中線太遠時輕輕拉回;玩家自己在打方向就少介入)
+  // ── 轉向平滑 + AI 輕扶回中(離中線太遠時輕輕拉回;玩家自己在打方向就少介入)
   let steerTarget = clamp(input.steer || 0, -1, 1);
-  if (cfg.assist > 0 && !car.offTrack) {
-    const off = car.lateral / Math.max(1, track.halfW);          // −1..1
-    if (Math.abs(off) > 0.45) {
-      const pull = -Math.sign(off) * (Math.abs(off) - 0.45) * 1.6 * cfg.assist;  // 往中線
-      steerTarget = clamp(steerTarget + pull * (1 - Math.abs(steerTarget) * 0.6), -1, 1);
+  const assist = opts.assist ?? cfg.assist ?? 0;
+  if (assist > 0) {   // ★ 出界時也要作用:最需要被扶回來的就是已經滑到草地上那一刻(只在路上=草地上放生)
+    const halfW = Math.max(1, track.halfW);
+    const off = clamp(car.lateral / halfW, -2.5, 2.5);                              // 車在半寬的幾成處(+右)
+    if (Math.abs(off) > ASSIST.dead) {
+      // ★ PD 不是純 P:只有 P(位置誤差)在 0906 極速提高後會左右盪過頭 —— kids 檔實測撞牆 17 → 23 次。
+      //   D 項吃 latRate(每秒往外飄幾公尺),把回中線的動作煞住,不會衝到對面牆。
+      const err = (Math.abs(off) - ASSIST.dead) * Math.sign(off);
+      const rate = clamp((car.latRate || 0) / halfW, -3, 3);
+      const pull = clamp(-(err * ASSIST.kP + rate * ASSIST.kD) * assist, -1, 1);
+      steerTarget = clamp(steerTarget + pull * (1 - Math.abs(steerTarget) * 0.6), -1, 1);   // 玩家自己在打方向就少介入
     }
   }
   car.steer += (steerTarget - car.steer) * Math.min(1, dt * 7);
@@ -128,6 +149,7 @@ export function stepCar(car, input, dt, cfg, track, opts = {}) {
   a -= sv * (CAR.roll + CAR.drag * v * v);
   if (car.offTrack) a -= sv * CAR.grassDrag;
   if (v > maxSpeed) a -= (v - maxSpeed) * 1.5;                     // 渦輪結束/出界 ⇒ 順順收速
+  if (v <= maxSpeed && a > 0) a = Math.min(a, (maxSpeed - v) / dt);   // 這幀不越過極速(0906 drag 變小後會在極速上下抖 ±0.1,測試「不超過極速」抓到)
   const v2 = v + a * dt;
   car.speed = (Math.abs(v2) < 0.12 && throttle === 0 && brake === 0) ? 0 : v2;
   if (v !== 0 && Math.sign(v2) !== sv && throttle === 0 && brake === 0) car.speed = 0; // 純阻力不會反向
@@ -157,6 +179,7 @@ export function stepCar(car, input, dt, cfg, track, opts = {}) {
   const n = nearest(track, car.x, car.z, car.trackIdx);
   let delta = n.dist - car.trackDist;
   if (delta > L / 2) delta -= L; else if (delta < -L / 2) delta += L;
+  car.latRate = (n.lateral - car.lateral) / dt;                      // 橫向漂移速度(給輔助的 D 項)
   car.trackIdx = n.idx; car.trackDist = n.dist; car.lateral = n.lateral;
   car.progress += delta;
   car.y = n.y;
@@ -228,7 +251,7 @@ export function rescue(car, track) {
   const p = pointAtOffset(track, d, 0);
   car.x = p.x; car.z = p.z; car.y = p.y;
   car.heading = p.heading;
-  car.speed = 0; car.lat = 0; car.steer = 0; car.yawRate = 0;
+  car.speed = 0; car.lat = 0; car.steer = 0; car.yawRate = 0; car.latRate = 0;
   car.lateral = 0; car.offTrack = false; car.wrongWay = false; car.wrongT = 0; car.stuckT = 0; car.bumpT = 0;
   const n = nearest(track, car.x, car.z, car.trackIdx);
   car.trackIdx = n.idx; car.trackDist = n.dist;

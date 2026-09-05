@@ -143,17 +143,24 @@ ok(rpm01(0, 30) >= 0.2 && rpm01(30, 30) <= 1, "rpm01 範圍");
 const f = forwardOf(0); near(f.x, 0, 1e-9, "forward(0).x"); near(f.z, 1, 1e-9, "forward(0).z");
 const rr = rightOf(0); near(rr.x, -1, 1e-9, "right(0).x = −1(與 track.rightOfTangent 同)");
 
-// ⑩ 幼兒輔助:kids 檔手放開、只給油,靠輔助能在路上撐 20 秒不出牆(不一定不出界,但不撞牆磨)
+// ⑩ 「AI 輕扶回中」:kids 檔手放開、只給油 20 秒,輔助開(該檔預設 0.85)比關(opts.assist=0)撞牆少;職業檔 on(0.35)也不比 off 多
 {
-  const kids = DIFFICULTY.kids;
-  const car = createCar(); placeOnTrack(car, track, 20, 0);
-  let bumps = 0;
-  for (let t = 0; t < 20; t += DT) {
-    const evs = stepCar(car, { ...emptyInput(), throttle: 1 }, DT, kids, track, {});
-    bumps += evs.filter((e) => e && e.type === "bump").length;
-  }
-  ok(Number.isFinite(car.x), "kids 檔跑完有限");
-  console.log(`  (kids 檔只給油 20 秒:撞牆 ${bumps} 次、progress ${car.progress.toFixed(0)}m)`);
+  const bumpsWith = (cfg, assist) => {
+    const car = createCar(); placeOnTrack(car, track, 20, 0);
+    let bumps = 0;
+    for (let t = 0; t < 20; t += DT) {
+      const evs = stepCar(car, { ...emptyInput(), throttle: 1 }, DT, cfg, track, assist === undefined ? {} : { assist });
+      bumps += evs.filter((e) => e && e.type === "bump").length;
+    }
+    ok(Number.isFinite(car.x), "跑完有限");
+    return bumps;
+  };
+  const kidsOn = bumpsWith(DIFFICULTY.kids), kidsOff = bumpsWith(DIFFICULTY.kids, 0);
+  ok(kidsOn < kidsOff, `kids 輔助開撞牆 ${kidsOn} < 關 ${kidsOff}`);
+  const hardOn = bumpsWith(DIFFICULTY.hard, 0.35), hardOff = bumpsWith(DIFFICULTY.hard, 0);
+  ok(hardOn <= hardOff, `hard 輔助 on(0.35)撞牆 ${hardOn} ≤ off ${hardOff}`);
+  ok(bumpsWith(DIFFICULTY.hard) === hardOff, "hard 未指定 opts.assist = 該檔預設 0 = off");
+  console.log(`  (kids 只給油 20 秒:輔助開 ${kidsOn} 次 / 關 ${kidsOff} 次;hard on ${hardOn} / off ${hardOff})`);
 }
 
 // ⑪ 車對車碰撞:追撞=推開+後車掉速;側擦=分開;不重疊就沒事
