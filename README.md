@@ -6,6 +6,10 @@ V 鍵或「視角」鈕循環,數字鍵 1~5 直跳,選擇會記住。
 
 溫柔規則:撞牆只彈開掉速、不翻車;開到草地變慢;卡住 2.5 秒自動放回賽道(或按 R);開反方向會提醒掉頭;人人跑得完,結算都有獎牌。
 
+## 線上
+
+https://new-hfpc-racing3d.netlify.app (Netlify direct upload;Cloudflare 審查解除後搬 CF Pages,見 CLAUDE.md「部署」)
+
 ## 玩
 
 ```bash

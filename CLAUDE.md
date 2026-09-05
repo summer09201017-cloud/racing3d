@@ -40,4 +40,12 @@ Three.js 街機賽車:自由移動的車體 + 閉環樣條賽道 + 五檔視角(
 
 ## 部署
 
-尚未部署。新站一律 Cloudflare(`/ship-cf`):`npm run build` → `npx wrangler deploy --name hfpc-racing3d --assets dist` → `CHECK_URL=... node scripts/browser-check.mjs`。psPing id `racing3d`(index.html)、`racing3d-done`/`racing3d-dwell`(main.js);sw `CACHE = "racing3d-v1"`(殼層有改就 bump);verTag 在 `index.html #verTag`。
+**2026-09-06 上線 Netlify(direct upload,未接 GitHub auto-build)**:https://new-hfpc-racing3d.netlify.app
+site id `4d240b0c-e780-4962-bf85-30779e678b64`;源碼 GitHub `summer09201017-cloud/racing3d`(main)。線上 browser-check 34/34。
+
+- **為什麼不是 CF**:Cloudflare 帳號 2026-09-03 起 ToS 審查(CF 原信只禁「加新網域」;「不建新 Pages/Worker」是我們 0903 自訂的預防規則),0904 使用者拍板「凍結期間純靜態新站先上 Netlify、站名加 `new-` 前綴」。審查解除後再搬 CF Pages(`hfpc-racing3d`),一週 3~5 站慢搬;搬時 psPing 的 `?g=racing3d` 鍵不變、統計不歸零,但 origin 會變 ⇒ 已裝 PWA 要重裝。
+- **更新流程(★ git push 不會上線,一定要重跑 deploy)**:
+  `npm test && npm run build && netlify deploy --prod --dir dist --site 4d240b0c-e780-4962-bf85-30779e678b64 --no-build`
+  → `CHECK_URL=https://new-hfpc-racing3d.netlify.app node scripts/browser-check.mjs`。殼層(index.html / sw.js / manifest)有改就 bump sw `CACHE = "racing3d-v1"`。
+- psPing id `racing3d`(index.html)、`racing3d-done` / `racing3d-dwell`(main.js)——beacon 只排除 localhost、不認 hostname,Netlify 上照常打;verTag 在 `index.html #verTag`。
+- **帳本尚未登記**(四處都要重佈 CF Worker,等使用者拍板):奧運頁卡(Desktop/hfpc-olympics)、作品集 add-work、sites.json、play-stats Worker NAMES。

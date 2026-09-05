@@ -1,4 +1,4 @@
-racing3d 交接 — 2026-09-05(首日開工)
+racing3d 交接 — 2026-09-06(第二日:上 GitHub + Netlify)
 
 ★ 現況(以這段為準)
 - 已完成:可玩的 3D 賽車 v1。三條賽道(草原 1338m / 沙漠 1836m / 雪山 1199m,含高度剖面)、
@@ -8,12 +8,19 @@ racing3d 交接 — 2026-09-05(首日開工)
   鍵盤/觸控/手把、合成音效(引擎聲跟車速)、小地圖、結算卡、PWA 殼(manifest/sw/icon)、
   psPing/-done/-dwell beacon、返回大廳鈕、直向提示+全螢幕鎖橫向、LINE 內建瀏覽器提醒。
 - 驗收:npm test 384 項全綠(track 181 / vehicle 68 / race headless 135);
-  npm run check:local 真瀏覽器 34/34 全綠,截圖在 screenshots/(首頁/倒數/五視角/駕駛座右轉/結算)。
-- 尚未:git init / GitHub / 部署(新站一律 CF:/ship-cf → hfpc-racing3d)、大廳卡、
-  預烤人聲播報(baked-voice-commentary:倒數/最後一圈/衝線)、雙人同機、幽靈車、聖經皮。
+  check:local 真瀏覽器 34/34;線上 browser-check 34/34(2026-09-06 對 Netlify 正址跑)。
+- 2026-09-06 上線:
+  · GitHub  https://github.com/summer09201017-cloud/racing3d(main,首 commit ae31de3)
+  · Netlify https://new-hfpc-racing3d.netlify.app(site id 4d240b0c-e780-4962-bf85-30779e678b64,
+    direct upload、repo_url=null 未接 GitHub build ⇒ git push 不會上線,改完要重跑 netlify deploy)
+  · 為什麼 Netlify 不是 CF:Cloudflare 帳號 0903 起 ToS 審查凍結;0904 使用者拍板「凍結期間純靜態新站先上
+    Netlify、站名加 new- 前綴」。審查解除後搬 CF Pages(hfpc-racing3d),一週 3~5 站慢搬。
+- 尚未:帳本四處(奧運頁卡 Desktop/hfpc-olympics、作品集 add-work、sites.json、play-stats Worker NAMES,
+  四處都要重佈 CF Worker)、預烤人聲播報(baked-voice-commentary:倒數/最後一圈/衝線)、
+  雙人同機、幽靈車、聖經皮。
 
 ★ 待使用者拍板
-- 要不要現在部署到 Cloudflare Pages(hfpc-racing3d)並點亮奧運頁/大廳卡?
+- 帳本四處要不要現在登記?(每一處都是「更新既有 CF Worker」,0903 自訂規則允許小改,但仍是碰 CF)
 - 玩家起跑格「排最後」(為了追尾鏡頭與超車樂趣)——若孩子想排前面,改 game.js startRace 的 grid 那段。
 - 幼兒檔輔助強度(vehicle.js DIFFICULTY.kids.assist 0.6):只給油不轉向 20 秒仍撞牆 19 次,要更保母就調 0.8~1。
 
@@ -24,3 +31,5 @@ racing3d 交接 — 2026-09-05(首日開工)
 4. 駕駛座後視鏡/頂梁離眼 0.3m 佈滿畫面 → 移到擋風玻璃頂;車身側傾只給鏡頭 40%。
 
 指令:npm run dev(run.bat)/ npm test / npm run build && npm run check:local
+部署:npm run build && netlify deploy --prod --dir dist --site 4d240b0c-e780-4962-bf85-30779e678b64 --no-build
+      → CHECK_URL=https://new-hfpc-racing3d.netlify.app node scripts/browser-check.mjs
