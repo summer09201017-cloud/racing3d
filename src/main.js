@@ -4,12 +4,14 @@ import "./styles.css";
 // 鍵位(雙人同機,duel-2p-kit):P1 左手 W/S/A/D + 左Shift 渦輪 + Space 手煞 + V 視角(1~5)+ R 回賽道;
 //                              P2 右手 ↑/↓/←/→ + 右Shift 渦輪 + Enter 手煞 + 0 視角 + Backspace 回賽道。
 //   ★ 單人時 P2 鍵全部別名回 P1(方向鍵照常能玩、沒有死鍵);切雙人同一段程式自動變 P2 專屬。觸控/手把只給 P1。
-import { RacingGame, CAM_VIEWS, CAM_LABELS, CAR_COLORS, LAP_OPTIONS, AI_OPTIONS, TRACKS, TRACK_IDS, DIFFICULTY, MODES, ASSIST_MODES, ASSIST_LABELS, GRID_OPTIONS, GRID_LABELS, fmtTime } from "./game.js";
+import { RacingGame, CAM_VIEWS, CAM_LABELS, CAR_COLORS, LAP_OPTIONS, AI_OPTIONS, TRACKS, BASE_TRACKS, BASE_TRACK_IDS, TRACK_VARIANTS, VARIANT_LABELS, trackIdOf, DIFFICULTY, MODES, ASSIST_MODES, ASSIST_LABELS, GRID_OPTIONS, GRID_LABELS, fmtTime } from "./game.js";
 import { AudioManager } from "./audio.js";
 import { GamepadInput } from "./gamepad.js";
 import { loadSettings, saveSettings } from "./storage.js";
 import { primeVoice, speakLine, setVoiceEnabled } from "./voice.js";
 import { phraseFor } from "./commentary.js";
+import { loadRecords, saveRecords, applyResult, getRecord, todayStr } from "./records.js";
+import { celebrate } from "./confetti.js";
 
 const $ = (id) => document.getElementById(id);
 const ui = {
@@ -27,9 +29,11 @@ const ui = {
   helpOverlay: $("helpOverlay"), helpCloseButton: $("helpCloseButton"),
   resultOverlay: $("resultOverlay"), resultEyebrow: $("resultEyebrow"), resultTitle: $("resultTitle"), resultText: $("resultText"), resultTable: $("resultTable"),
   resultMenuButton: $("resultMenuButton"), resultAgainButton: $("resultAgainButton"),
-  homeScreen: $("homeScreen"), modeSelect: $("modeSelect"), trackSelect: $("trackSelect"), lapsSelect: $("lapsSelect"), aiSelect: $("aiSelect"),
+  homeScreen: $("homeScreen"), modeSelect: $("modeSelect"), trackSelect: $("trackSelect"), variantSelect: $("variantSelect"), lapsSelect: $("lapsSelect"), aiSelect: $("aiSelect"),
   difficultySelect: $("difficultySelect"), assistSelect: $("assistSelect"), gridSelect: $("gridSelect"), colorSelect: $("colorSelect"), audioSelect: $("audioSelect"),
   colorLabel: $("colorLabel"), startButton: $("startButton"),
+  pauseButton: $("pauseButton"), pauseOverlay: $("pauseOverlay"), pauseResumeButton: $("pauseResumeButton"), pauseMenuButton: $("pauseMenuButton"),
+  recordText: $("recordText"), homeRecord: $("homeRecord"), recText: $("recText"), recText2: $("recText2"),
 };
 
 /* ── 設定(記住上次選擇;亂值回預設) ── */
@@ -57,7 +61,10 @@ const fill = (sel, items, value) => {
   }
 };
 fill(ui.modeSelect, Object.values(MODES).map((m) => ({ value: m.id, label: m.label })), settings.mode);
-fill(ui.trackSelect, TRACK_IDS.map((id) => ({ value: id, label: `${TRACKS[id].emoji} ${TRACKS[id].label}` })), settings.trackId);
+// 賽道選單=3 條基底 + 「方向」4 檔(正走/逆走/鏡像/鏡像逆走),合成 12 個 trackId;選單短、孩子看得懂
+const baseOf = (id) => (TRACKS[id] && TRACKS[id].base) || "meadow", variantOfId = (id) => (TRACKS[id] && TRACKS[id].variant) || "";
+fill(ui.trackSelect, BASE_TRACK_IDS.map((id) => ({ value: id, label: `${BASE_TRACKS[id].emoji} ${BASE_TRACKS[id].label}` })), baseOf(settings.trackId));
+fill(ui.variantSelect, TRACK_VARIANTS.map((v) => ({ value: v, label: VARIANT_LABELS[v] })), variantOfId(settings.trackId));
 fill(ui.lapsSelect, LAP_OPTIONS.map((n) => ({ value: n, label: `${n} 圈` })), settings.laps);
 fill(ui.aiSelect, AI_OPTIONS.map((n) => ({ value: n, label: n === 0 ? "沒有對手(練習)" : `${n} 台電腦車` })), settings.aiCount);
 fill(ui.difficultySelect, Object.values(DIFFICULTY).map((d) => ({ value: d.id, label: `${d.label}(極速 ${Math.round(d.maxSpeed * 3.6)} km/h)` })), settings.difficulty);
@@ -93,15 +100,34 @@ function applyModeUi() {
   if (ui.colorLabel) ui.colorLabel.firstChild.textContent = two ? "車色(雙人固定:P1 藍・P2 紅)" : "車色";
 }
 ui.modeSelect.addEventListener("change", () => { settings.mode = ui.modeSelect.value; saveSettings({ mode: settings.mode }); applyModeUi(); });
-ui.trackSelect.addEventListener("change", () => { settings.trackId = ui.trackSelect.value; saveSettings({ trackId: settings.trackId }); game.setTrack(settings.trackId); game.setPlayerColor(settings.colorIdx); buildMiniBase(); });
-ui.lapsSelect.addEventListener("change", () => { settings.laps = Number(ui.lapsSelect.value); saveSettings({ laps: settings.laps }); });
+function applyTrack() {
+  settings.trackId = trackIdOf(ui.trackSelect.value, ui.variantSelect.value);
+  if (!TRACKS[settings.trackId]) settings.trackId = "meadow";
+  saveSettings({ trackId: settings.trackId }); game.setTrack(settings.trackId); game.setPlayerColor(settings.colorIdx); buildMiniBase(); updateHomeRecord();
+}
+ui.trackSelect.addEventListener("change", applyTrack);
+ui.variantSelect.addEventListener("change", applyTrack);
+ui.lapsSelect.addEventListener("change", () => { settings.laps = Number(ui.lapsSelect.value); saveSettings({ laps: settings.laps }); updateHomeRecord(); });
 ui.aiSelect.addEventListener("change", () => { settings.aiCount = Number(ui.aiSelect.value); saveSettings({ aiCount: settings.aiCount }); });
-ui.difficultySelect.addEventListener("change", () => { settings.difficulty = ui.difficultySelect.value; saveSettings({ difficulty: settings.difficulty }); });
+ui.difficultySelect.addEventListener("change", () => { settings.difficulty = ui.difficultySelect.value; saveSettings({ difficulty: settings.difficulty }); updateHomeRecord(); });
 ui.assistSelect.addEventListener("change", () => { settings.assist = ui.assistSelect.value; saveSettings({ assist: settings.assist }); });
 ui.gridSelect.addEventListener("change", () => { settings.gridPos = ui.gridSelect.value; saveSettings({ gridPos: settings.gridPos }); });
 ui.colorSelect.addEventListener("change", () => { settings.colorIdx = Number(ui.colorSelect.value); saveSettings({ colorIdx: settings.colorIdx }); game.setPlayerColor(settings.colorIdx); });
 ui.audioSelect.addEventListener("change", () => setAudio(ui.audioSelect.value === "on"));
 applyModeUi();
+
+/* ── 本機最佳紀錄(v3):每組「賽道×圈數×難度」記最佳總時間、「賽道×難度」記最佳單圈;首頁與 HUD 都看得到目標 ── */
+let records = loadRecords();
+let raceRecord = { time: 0, lap: 0 };
+function updateHomeRecord() {
+  if (!ui.homeRecord) return;
+  const r = getRecord(records, settings.trackId, settings.laps, settings.difficulty);
+  const diff = (DIFFICULTY[settings.difficulty] || DIFFICULTY.easy).label;
+  ui.homeRecord.textContent = r.time
+    ? `🏆 這條賽道你的最佳:總時間 ${fmtTime(r.time)}(${settings.laps} 圈・${diff})${r.lap ? `・最佳單圈 ${fmtTime(r.lap)}` : ""}`
+    : `🏆 這條賽道(${settings.laps} 圈・${diff})還沒有紀錄,跑完第一場就會記住你的最佳時間。`;
+}
+updateHomeRecord();
 
 function setAudio(on) {
   audioEnabled = on;
@@ -157,12 +183,16 @@ function startRace() {
   ui.resultOverlay.classList.remove("visible");
   game.startRace({ ...settings });
   buildMiniBase();
+  raceRecord = getRecord(records, settings.trackId, settings.laps, settings.difficulty);
+  const recLine = raceRecord.lap ? `・紀錄 ${fmtTime(raceRecord.lap)}` : "";
+  ui.recText.textContent = recLine; ui.recText2.textContent = recLine;
   raceStartedAt = performance.now();
   if (!helpSeen) { openHelp(); helpSeen = true; saveSettings({ helpSeen: true }); }
 }
 ui.startButton.addEventListener("click", startRace);
 ui.resultAgainButton.addEventListener("click", startRace);
 const toMenu = () => {
+  game.setPaused(false);
   ui.resultOverlay.classList.remove("visible");
   ui.helpOverlay.classList.remove("visible");
   ui.homeScreen.classList.add("visible");
@@ -175,8 +205,27 @@ ui.cameraButton2.addEventListener("click", () => { game.cycleCamView(1); audio.u
 ui.rescueButton.addEventListener("click", () => game.requestRescue(0));
 ui.rescueButton2.addEventListener("click", () => game.requestRescue(1));
 
-function openHelp() { ui.helpOverlay.classList.add("visible"); }
-function closeHelp() { ui.helpOverlay.classList.remove("visible"); }
+/* ── 暫停(v3):P / Esc / ⏸ 鈕 / 手把 Start;分頁切走自動暫停(回來要自己按繼續)。蓋版在玩法說明底下時不重複顯示 ── */
+function setPauseUi(on) {
+  ui.pauseOverlay.classList.toggle("visible", on && !ui.helpOverlay.classList.contains("visible"));
+  ui.pauseButton.textContent = on ? "▶ 繼續" : "⏸ 暫停";
+}
+ui.pauseButton.addEventListener("click", () => { game.togglePause(); audio.uiTap(); });
+ui.pauseResumeButton.addEventListener("click", () => game.setPaused(false));
+ui.pauseMenuButton.addEventListener("click", toMenu);
+
+// 玩法說明在比賽中打開=順手暫停(第一次開賽自動跳說明時,倒數不再被吃掉);關掉就繼續
+let helpAutoPaused = false;
+function openHelp() {
+  ui.helpOverlay.classList.add("visible");
+  if ((game.phase === "racing" || game.phase === "countdown") && !game.paused) { game.setPaused(true); helpAutoPaused = true; }
+  setPauseUi(!!game.paused);
+}
+function closeHelp() {
+  ui.helpOverlay.classList.remove("visible");
+  if (helpAutoPaused) { helpAutoPaused = false; game.setPaused(false); }
+  setPauseUi(!!game.paused);
+}
 ui.helpButton.addEventListener("click", openHelp);
 ui.helpCloseButton.addEventListener("click", closeHelp);
 
@@ -191,7 +240,13 @@ window.addEventListener("keydown", (e) => {
   if (e.target && ["SELECT", "INPUT", "TEXTAREA"].includes(e.target.tagName)) return;
   const k = e.key, c = e.code;
   const two = game.is2P();
-  if (k === "Escape") { if (ui.helpOverlay.classList.contains("visible")) closeHelp(); else if (game.phase !== "menu") toMenu(); return; }
+  if (k === "Escape") {   // 比賽中 Esc=暫停(不再直接作廢整場);結算後 Esc=回選單
+    if (ui.helpOverlay.classList.contains("visible")) closeHelp();
+    else if (game.phase === "racing" || game.phase === "countdown") game.togglePause();
+    else if (game.phase !== "menu") toMenu();
+    return;
+  }
+  if (k === "p" || k === "P") { game.togglePause(); return; }
   if (k === "h" || k === "H") { ui.helpOverlay.classList.contains("visible") ? closeHelp() : openHelp(); return; }
   if (k === "v" || k === "V") { game.cycleCamView(0); audio.uiTap(); return; }
   if (k >= "1" && k <= "5") { const id = CAM_VIEWS[Number(k) - 1]; if (id) { game.setCamView(id, 0); audio.uiTap(); } return; }
@@ -220,7 +275,7 @@ const smooth = (cur, target, dt) => { cur += (target - cur) * Math.min(1, dt * (
 function pollInput(dt) {
   gp.poll();
   if (gp.justPressed.Y) { game.cycleCamView(0); audio.uiTap(); }
-  if (gp.justPressed.START && game.phase !== "menu") toMenu();
+  if (gp.justPressed.START) { if (game.phase === "racing" || game.phase === "countdown") game.togglePause(); else if (game.phase !== "menu") toMenu(); }
   if (gp.justPressed.A && game.phase === "menu" && ui.homeScreen.classList.contains("visible")) startRace();
   const two = game.is2P();
   const has = (c) => codes.has(c);
@@ -304,6 +359,8 @@ game.onHud = (hud) => {
   ui.rescueButton.hidden = hud.phase !== "racing";
   ui.rescueButton2.hidden = !(hud.phase === "racing" && two);
   ui.cameraButton2.hidden = !two;
+  ui.pauseButton.hidden = !(hud.phase === "racing" || hud.phase === "countdown");
+  setPauseUi(!!hud.paused);
   ui.cameraButton.textContent = two ? "視角 P1" : "視角";
   ui.rescueButton.textContent = two ? "回賽道 P1" : "回賽道";
   if (racing) {
@@ -364,6 +421,7 @@ game.onEvent = (type, d) => {
     case "wrongway": audio.wrongWay(); break;
     case "rescue": audio.rescue(); break;
     case "playerfinish": audio.lap(true); break;
+    case "pause": case "resume": audio.uiTap(); break;
     case "finish": showResults(d); audio.finish(d.mode === "duel2p" ? 1 : d.rank); sendDone(); break;
     default: break;
   }
@@ -376,6 +434,26 @@ function showResults(r) {
   ui.resultText.textContent = two
     ? `P1 ${fmtTime(r.time)}(第 ${r.rank} 名)・P2 ${fmtTime(r.time2)}(第 ${r.rank2} 名)`
     : `總時間 ${fmtTime(r.time)}・最佳單圈 ${fmtTime(r.bestLap)}`;
+  // 本機最佳紀錄(v3):每位人類車手各套一次;第一次跑這條賽道只「記下」不慶祝;破紀錄才有 🏆 與人聲
+  const humans = two ? [{ tag: "P1 ", time: r.time, lap: r.bestLap }, { tag: "P2 ", time: r.time2, lap: r.bestLap2 }] : [{ tag: "", time: r.time, lap: r.bestLap }];
+  const lines = [];
+  let broke = false;
+  for (const h of humans) {
+    const res = applyResult(records, { trackId: r.trackId, laps: r.laps, difficulty: r.difficultyId, time: h.time, bestLap: h.lap, date: todayStr() });
+    records = res.records;
+    if (res.newTime && res.prevTime) lines.push(`${h.tag}🏆 新紀錄!總時間 ${fmtTime(h.time)}(之前 ${fmtTime(res.prevTime)})`);
+    else if (res.newTime) lines.push(`${h.tag}第一次跑這條賽道,記下紀錄 ${fmtTime(h.time)}`);
+    else lines.push(`${h.tag}最佳紀錄 ${fmtTime(res.prevTime)}${res.newLap ? `・🏆 單圈新紀錄 ${fmtTime(h.lap)}` : ""}`);
+    if ((res.newTime && res.prevTime > 0) || (res.newLap && res.prevLap > 0)) broke = true;
+  }
+  saveRecords(records);
+  updateHomeRecord();
+  ui.recordText.textContent = lines.join("　");
+  if (broke) setTimeout(() => speakLine(phraseFor("newrecord")), 2600);   // 等衝線那句唸完
+  // 彩帶(win-confetti):單人前三名 / 雙人有人贏 ⇒ 結算卡出現時從上灑落;reduced-motion 自動 no-op
+  if (two || r.rank <= 3) setTimeout(() => { try { celebrate({ count: 140 }); } catch { /* ignore */ } }, 1200);
+  // 課堂排行房(classroom-rank-room):只在單人回報;分數=平均時速 km/h(越大越快;全班同難度同賽道才公平)
+  if (!two) { try { const km = (r.trackLength * r.laps) / 1000, hours = r.time / 3600; if (hours > 0) window.hfpcRank?.report(Math.round(km / hours)); } catch { /* 排行是加分項 */ } }
   ui.resultTable.innerHTML = "";
   for (const row of r.rows) {
     const tr = document.createElement("tr");
@@ -405,7 +483,7 @@ function sendDwell() {
   if (s >= 3 && s <= 1800 && navigator.sendBeacon) { dwellSent = true; navigator.sendBeacon(PING + "racing3d-dwell&t=" + s); }
 }
 window.addEventListener("pagehide", sendDwell);
-document.addEventListener("visibilitychange", () => { if (document.hidden) { sendDwell(); audio.suspend(); } else audio.resume(); });
+document.addEventListener("visibilitychange", () => { if (document.hidden) { sendDwell(); audio.suspend(); game.setPaused(true); } else audio.resume(); });   // 切走自動暫停(回來自己按繼續)
 
 /* ── 主迴圈(輸入 + 引擎聲掛在 game 的 RAF 之前;引擎聲跟 P1) ── */
 const origUpdate = game.update.bind(game);
@@ -414,7 +492,7 @@ game.update = (dt) => {
   origUpdate(dt);
   if (flashTimer > 0) flashTimer -= dt;
   const p = game.player, cfg = DIFFICULTY[game.settings.difficulty] || DIFFICULTY.easy;
-  const active = game.phase === "racing" || game.phase === "finished";
+  const active = (game.phase === "racing" || game.phase === "finished") && !game.paused;
   if (p) audio.setEngine(active ? (Math.abs(p.speed) / cfg.maxSpeed) : 0.1, active ? game.input.throttle : 0, !!p.boosting, Math.min(1, Math.abs(p.lat) / 6), active);
 };
 game.start();

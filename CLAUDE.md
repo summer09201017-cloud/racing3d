@@ -1,13 +1,13 @@
 # racing3d — 3D 賽車・五檔視角(含駕駛座第一人稱)+ 雙人同機
 
-Three.js 街機賽車:自由移動的車體 + 閉環樣條賽道 + 五檔視角(追尾/車頭/駕駛座/高空俯瞰/轉播機位)+ AI 對手 + 溫柔規則
-+ 分割畫面雙人同機 + 預烤人聲播報。
-2026-09-05 開工、09-06 v2(規劃見記憶 racing3d-plan)。現況以 `讀我-HANDOFF.txt` ★段為準,待做見 `roadmap.md`。
+Three.js 街機賽車:自由移動的車體 + 閉環樣條賽道(3 基底 × 4 方向 = 12 條)+ 五檔視角(追尾/車頭/駕駛座/高空俯瞰/轉播機位)+ AI 對手 + 溫柔規則
++ 分割畫面雙人同機 + 預烤人聲播報 + 暫停 / 完美起跑 / 本機紀錄 / 課堂排行房 / 彩帶。
+2026-09-05 開工、09-06 v2、09-07 v3(規劃見記憶 racing3d-plan)。現況以 `讀我-HANDOFF.txt` ★段為準,待做見 `roadmap.md`。
 
 ## 指令
 
 - `npm run dev` / `run.bat` — 本機開發(<http://localhost:5173>)
-- `npm test` — 純函數五層 node 直測(track / vehicle / race headless / race2p 雙人+輔助+起跑格 / commentary 播報對賬),不用瀏覽器
+- `npm test` — 純函數六層 node 直測(track 含 12 條變體 / vehicle / race headless / race2p 雙人+輔助+起跑格 / commentary 播報對賬 / v3 暫停・完美起跑・紀錄・變體),不用瀏覽器
 - `npm run build && npm run check:local` — 真瀏覽器驗收(playwright-core+系統 Edge,免下載):起 preview → 開賽真 click → 五檔視角各截一張 → 結算 → **雙人同機分割畫面** → `screenshots/` → 0 pageerror
 - `CHECK_URL="https://..." node scripts/browser-check.mjs` — 直驗線上
 - `npm run voice` — 重烤人聲 mp3(需網路;只有在 `PHRASES` 加句子後才要跑,累加式)
@@ -16,11 +16,13 @@ Three.js 街機賽車:自由移動的車體 + 閉環樣條賽道 + 五檔視角(
 
 | 檔 | 職責 |
 |---|---|
-| `src/track.js` | ★地基:閉環 Catmull-Rom 等弧長取樣 2000 點 + 高度剖面(smoothstep 關鍵影格)。`posAt(dist)`、`nearest(x,z,hint)`(里程/帶號橫向/高度)、`pointAtOffset`、`tvCameraSpots`。`TRACKS` 一條賽道一筆資料,加賽道不加程式 |
+| `src/track.js` | ★地基:閉環 Catmull-Rom 等弧長取樣 2000 點 + 高度剖面(smoothstep 關鍵影格)。`posAt(dist)`、`nearest(x,z,hint)`(里程/帶號橫向/高度)、`pointAtOffset`、`tvCameraSpots`。`BASE_TRACKS` 一條賽道一筆資料,加賽道不加程式;`variantOf` 展開 逆走(控制點反序+高度 u→1−u)/ 鏡像(x 取負)⇒ `TRACKS` 12 條 |
 | `src/vehicle.js` | 街機車體純函數 `stepCar`:油門/煞車/倒車、轉向率隨速度、橫向滑移(甩尾)、渦輪計費(遲滯)、出界變慢、撞牆彈開、逆向偵測、卡住自動救援、圈數。**`ASSIST` PD 輔助**與 `assistStrength()` 三態。`resolveCollisions` 車對車溫柔推開。`DIFFICULTY` 五檔 |
 | `src/ai.js` | 對手腦:追前方車道點 + 彎前煞車 `v=sqrt(latAcc/k)` + 閃避 + 溫柔橡皮筋 + 渦輪(同一套計費) |
 | `src/game.js` | THREE 場景(換賽道=換整個 Scene)、車體 rig(外殼+車內組)、**`cams` 雙視窗鏡頭**、狀態機 menu→countdown→racing→finished、名次/結算。不碰 DOM;headless 可在 node 跑整場 |
-| `src/main.js` | UI 接線:選單/HUD(單人與分割雙份)/小地圖/鍵盤/觸控/手把 → `game.input` / `game.input2`、音效、人聲、beacons、PWA |
+| `src/main.js` | UI 接線:選單(賽道=基底 + 方向兩個下拉合成 trackId)/HUD(單人與分割雙份)/小地圖/鍵盤/觸控/手把 → `game.input` / `game.input2`、音效、人聲、beacons、PWA;**v3** 暫停蓋版與 P/Esc/Start、紀錄顯示(首頁/HUD/結算)、彩帶、排行房 report |
+| `src/records.js` | 本機最佳紀錄純函數:`applyResult`(不改原物件,回 new/prev)、`getRecord`、`normalizeRecords`;key=`賽道|難度`(單圈)與 `賽道|圈數|難度`(總時間);localStorage 包 try/catch;日期用本地 `todayStr` 不用 toISOString |
+| `src/confetti.js` | win-confetti 原樣收割:`celebrate()` 從上灑落 2.2 秒自己清乾淨,reduced-motion no-op,canvas 帶 `data-confetti`(驗收用) |
 | `src/audio.js` | Web Audio 合成:引擎聲(轉速跟車速)、渦輪、撞牆、輪胎滑、倒數、圈數、完賽(零音檔) |
 | `src/voicePhrases.js` / `scripts/gen-voice.mjs` / `src/voice.js` / `src/commentary.js` | 人聲播報三件套 + 事件對應。**鐵律:預烤 mp3(雲哲神經語音),絕不用 Web Speech 機器聲;缺檔=靜默只出字幕** |
 
@@ -32,6 +34,15 @@ Three.js 街機賽車:自由移動的車體 + 閉環樣條賽道 + 五檔視角(
 - 起跑格索引 0 = 最前格,一排兩台;`d = L − 6 − row·7.5`,`progress = −(L − d)` 起跑為負,跨線後 ≥0;`lap = floor(progress/L)`。
   預設玩家排**最後一排**(後面沒車擋追尾鏡頭、超車才好玩),選單可改最前排;雙人一定同一排(P1 左 P2 右,跟分割畫面一致)。
 - 雙人:`car.playerIdx` = 視窗索引 = `cams` 索引 = P1/P2。單閘門 `is2P()`,別另開旗標。
+- 賽道 id:基底 `meadow`;變體 `meadow-rev` / `meadow-mir` / `meadow-mirrev`(`trackIdOf(base, variant)`)。正走 label 不加後綴,變體加「・逆走」等;`TRACKS[id].base / .variant` 給選單還原。變體是不同賽道 ⇒ 紀錄分開。
+
+## v3 規則(0907,改動前先讀)
+
+- **暫停**=`update()` 早退(`this.paused`),連 `this.time`、訊息計時、鏡頭都不推;`render()` 照畫最後一幀。只在 countdown/racing 可暫停(`setPaused` 回 false 表示拒絕),startRace/backToMenu 一律清掉。UI 端:P / Esc / ⏸ 鈕 / 手把 Start;玩法說明在比賽中打開=順手暫停(關掉就繼續);`visibilitychange` hidden ⇒ 自動暫停、**不自動繼續**。
+- **完美起跑**:`PERFECT_START = { hold 1.2, window 0.6, boostSeconds 1.4, aiChance 0.5 }`。倒數期間只累計 `car.holdT`(油門連續按住幾秒);GO 後前 window 秒第一次踩油門判一次(`_judgeStarts`):`holdT ≤ hold` ⇒ `startBoostT = boostSeconds`,否則只提醒。**免費渦輪的做法=每幀強制 `input.boost=true`、stepCar 完把 turbo/tired 退回**,不碰 vehicle.js;stepCar 的 boost/boostend 事件照發(火焰/音效自然對)。AI 在 GO 那一幀用 `brain.rnd() < aiSkill × aiChance` 決定。autopilot 不判。
+- **AI 種子每場輪換**:`makeAiBrain(0.137 + i·0.311 + ((raceNo−1) % 97)·0.0071)`;同一個 RacingGame 的第一場永遠一樣(測試可重現),「再來一場」會不一樣。
+- **紀錄**只在 UI 層(main.js showResults)套 `applyResult`;game.js 只在 results 多帶 `trackId / difficultyId / trackLength / bestLap2`。第一次跑=「記下」不慶祝;`prev > 0` 且更快才是 🏆 + 人聲(延遲 2.6 秒等衝線那句唸完)。
+- **排行房分數**=`round(平均時速 km/h)`(rank.js 只認「越大越好的整數」,沒有格式化選項);只在單人回報,雙人不報。
 
 ## 極速調校(0906,改 `DIFFICULTY` 前先讀)
 
@@ -56,6 +67,11 @@ Three.js 街機賽車:自由移動的車體 + 閉環樣條賽道 + 五檔視角(
 11. **雙人的駕駛座藏車艙要「每一刀各自判斷」**:同一個 scene 畫兩次,只有「該視窗車手自己選駕駛座」才藏他的車艙,對手的車艙照常顯示。`render()` 每刀前呼叫 `_applyCockpitHide(i)`,畫完還原 `-1`。
 12. **`trackDist` 不能拿來比「是不是同一排」**(0906 測試踩到):它是 `nearest()` 從 2000 點取樣算的,兩台車橫向偏移不同時會落在不同取樣點,誤差可達公尺級。要比同排請比 `progress`(那是程式直接設的,精確)。
 13. **本 repo 的 .js 是 CRLF**(0906 踩到):寫補丁腳本用 `indexOf` 比對多行片段會全部找不到。先 `split("\r\n").join("\n")`、寫回時還原。
+14. **rank.js 的 🏆 浮鈕釘在 top 112px 左側 8~56px**(0907 截圖抓到):左上 `.race-card` 原本 left 12px 會被它蓋住「第 N 名」那行 ⇒ 卡片 left 改 62px。任何新浮鈕先看 index.html 尾端那些跨站 script 各佔哪個角。
+15. **玩法說明打開=順手暫停**(v3):browser-check 第一次開賽會自動跳說明,腳本一定要真 click 關掉才會倒數(現有腳本本來就這樣做,但新增測試別假設「開賽 N 秒後一定 racing」)。
+16. **AI 完美起跑的測試不能釘單場**(0907):種子固定 ⇒ 單場結果固定,「5 台全中」單場機率 3% 但一旦發生就永遠發生;改用六場合計區間 + kids < hard(見 v3.test ②)。
+17. **判斷檔案 LF/CRLF 用 node 不用 Git Bash 的 grep**(0907):`grep -q $''` 在這台的 Git Bash 對 CRLF 檔也回「LF」,害補丁腳本第一次錨點全找不到;`node -e` 讀進來 `includes("
+")` 才準(本 repo 現況:src/*.js 與 styles.css 是 CRLF,md/html/json 是 LF)。
 
 ## 部署
 
@@ -65,6 +81,6 @@ site id `4d240b0c-e780-4962-bf85-30779e678b64`;源碼 GitHub `summer09201017-clo
 - **為什麼不是 CF**:Cloudflare 帳號 2026-09-03 起 ToS 審查(CF 原信只禁「加新網域」;「不建新 Pages/Worker」是我們 0903 自訂的預防規則),0904 使用者拍板「凍結期間純靜態新站先上 Netlify、站名加 `new-` 前綴」。審查解除後再搬 CF Pages(`hfpc-racing3d`),見 `roadmap.md` 待做第 1 項。
 - **更新流程(★ git push 不會上線,一定要重跑 deploy)**:
   `npm test && npm run build && netlify deploy --prod --dir dist --site 4d240b0c-e780-4962-bf85-30779e678b64 --no-build`
-  → `CHECK_URL=https://new-hfpc-racing3d.netlify.app node scripts/browser-check.mjs`。殼層(index.html / sw.js / manifest / voice)有改就 bump sw `CACHE`(目前 `racing3d-v2`)。
+  → `CHECK_URL=https://new-hfpc-racing3d.netlify.app node scripts/browser-check.mjs`。殼層(index.html / sw.js / manifest / voice)有改就 bump sw `CACHE`(目前 `racing3d-v3`)。
 - psPing id `racing3d`(index.html)、`racing3d-done` / `racing3d-dwell`(main.js)——beacon 只排除 localhost、不認 hostname,Netlify 上照常打;verTag 在 `index.html #verTag`。
 - **帳本四處 2026-09-06 已登記**(由 0905-bb 場完成並逐站驗過):奧運頁卡(`Desktop/hfpc-olympics`,dca2e9c)、作品集(7c0fcad)、play-stats NAMES+versions(87ec829)、sites.json 兩份。搬 CF 時這四處的網址要一起改。

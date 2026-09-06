@@ -23,7 +23,7 @@ button { font-family: inherit; }
 
 /* 左上:圈數/名次(返回大廳鈕在 8px,卡片放 64px 下) */
 .race-card {
-  position: absolute; top: 64px; left: 12px; z-index: 20;
+  position: absolute; top: 64px; left: 62px; z-index: 20;   /* left 62:讓位給 rank.js 的 🏆 浮鈕(top 112px 左側 8~56px),不然蓋住名次(0907 截圖抓到) */
   padding: 10px 16px; border-radius: 16px;
   background: rgba(10, 16, 30, 0.78); border: 1px solid rgba(255, 196, 80, 0.4);
   min-width: 190px;
@@ -128,6 +128,10 @@ button { font-family: inherit; }
 .result-table tr.me td { background: rgba(255, 210, 74, 0.14); font-weight: 800; }
 .result-table .dot { display: inline-block; width: 12px; height: 12px; border-radius: 50%; margin-right: 8px; vertical-align: middle; border: 1px solid rgba(255,255,255,0.4); }
 .result-card h2 { font-size: 30px; }
+.record-text { margin-top: 6px; color: #ffd24a; font-weight: 700; font-size: 15px; line-height: 1.6; min-height: 1.2em; }
+.pause-card h2 { font-size: 30px; }
+.pause-card p { font-size: 16px; }
+#pauseButton { border-color: rgba(255, 210, 74, 0.55); color: #ffd24a; font-weight: 700; }
 
 /* 首頁 */
 .home-screen {

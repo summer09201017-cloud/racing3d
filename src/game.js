@@ -4,11 +4,11 @@
 // ★ mesh.visible 一律 !!(0827 全艦隊通則)。
 // ★ 視角名單一份常數(CAM_VIEWS + CAM_LABELS),localStorage 驗證與 cycleCamView 吃同一份。
 import * as THREE from "three";
-import { TRACKS, TRACK_IDS, buildTrack, posAt, pointAtOffset, rightOfTangent, tvCameraSpots, nearest } from "./track.js";
+import { TRACKS, TRACK_IDS, BASE_TRACKS, BASE_TRACK_IDS, TRACK_VARIANTS, VARIANT_LABELS, trackIdOf, buildTrack, posAt, pointAtOffset, rightOfTangent, tvCameraSpots, nearest } from "./track.js";
 import { CAR, DIFFICULTY, ASSIST_MODES, ASSIST_LABELS, assistStrength, createCar, placeOnTrack, stepCar, emptyInput, rescue, forwardOf, rpm01, kmh, clamp, resolveCollisions } from "./vehicle.js";
 import { makeAiBrain, aiInput } from "./ai.js";
 
-export { TRACKS, TRACK_IDS, DIFFICULTY, ASSIST_MODES, ASSIST_LABELS };
+export { TRACKS, TRACK_IDS, BASE_TRACKS, BASE_TRACK_IDS, TRACK_VARIANTS, VARIANT_LABELS, trackIdOf, DIFFICULTY, ASSIST_MODES, ASSIST_LABELS };
 
 /* 模式(duel-2p-kit 單閘門:所有分歧只問 is2P()):solo=單人;duel2p=雙人同機分割畫面(左 P1 藍、右 P2 紅,鐵則色)。 */
 export const MODES = { solo: { id: "solo", label: "單人" }, duel2p: { id: "duel2p", label: "雙人同機(分割畫面)" } };
@@ -37,6 +37,10 @@ export const AI_OPTIONS = [0, 1, 2, 3, 5];
 export const AI_NAMES = ["阿福", "小美", "大衛", "以諾", "米迦", "撒拉", "約書亞"];
 export const DEFAULT_SETTINGS = { trackId: "meadow", laps: 3, aiCount: 3, difficulty: "easy", colorIdx: 0, mode: "solo", assist: "auto", gridPos: "last" };
 const COUNTDOWN_SECONDS = 3.6;
+/* 完美起跑(v3 規則,0907):GO 之後 window 秒內踩油門、而且油門「連續按住」還不到 hold 秒(倒數到「1」才踩算,從「3」就一直按不算)
+   ⇒ 免費渦輪 boostSeconds 秒(燃料每幀退回,不碰 stepCar 物理)。太早按不罰、只提醒(溫柔規則)。
+   AI 也會:每台以 aiSkill × aiChance 的機率拿到(職業檔約一半、幼兒檔約兩成),種子固定可重現。 */
+export const PERFECT_START = { hold: 1.2, window: 0.6, boostSeconds: 1.4, aiChance: 0.5 };
 
 const V = () => new THREE.Vector3();
 const lambert = (color, extra = {}) => new THREE.MeshLambertMaterial({ color, ...extra });
@@ -51,6 +55,7 @@ export class RacingGame {
     this.input = emptyInput();    // P1
     this.input2 = emptyInput();   // P2(雙人同機)
     this.autopilot = false;       // 測試/展示:玩家車(全部人類車)交給 AI
+    this.paused = false;          // 暫停(v3):只在倒數/比賽中;整個世界凍住(物理/計時/鏡頭都不推),render 照畫最後一幀
     this.cars = []; this.rigs = new Map(); this.brains = new Map();
     this.player = null;           // P1(相容舊呼叫)
     this.players = [];            // 人類車手 [P1, P2?];索引 = car.playerIdx = 視窗索引
@@ -561,11 +566,13 @@ export class RacingGame {
     if (two) this.players.push(this._spawnCar({ name: "P2", isPlayer: true, playerIdx: 1, colorIdx: P2_COLOR }, CAR_COLORS[P2_COLOR].hex, true));
     const used = new Set(this.players.map((p) => p.colorIdx));
     const others = CAR_COLORS.map((_, i) => i).filter((i) => !used.has(i));
+    // 每場換一組 AI 種子(第 N 場):再來一場時車道偏好/完美起跑不會一模一樣;同一個 RacingGame 的第一場仍固定(測試可重現)
+    this.raceNo = (this.raceNo || 0) + 1;
     const ais = [];
     for (let i = 0; i < next.aiCount; i++) {
       const ci = others[i % others.length];
       const ai = this._spawnCar({ name: AI_NAMES[i % AI_NAMES.length], colorIdx: ci }, CAR_COLORS[ci].hex, false);
-      this.brains.set(ai, makeAiBrain(0.137 + i * 0.311, cfg));
+      this.brains.set(ai, makeAiBrain(0.137 + i * 0.311 + ((this.raceNo - 1) % 97) * 0.0071, cfg));
       ais.push(ai);
     }
     // 起跑格:兩列交錯,索引 0 = 最前格。玩家依 gridPos 排最後(預設;後面沒車擋追尾鏡頭、超車才好玩)或最前;
@@ -579,9 +586,11 @@ export class RacingGame {
       placeOnTrack(car, t, d, alone ? 0 : (col === 0 ? -1 : 1) * t.halfW * 0.45);
       car.progress = -(L - d);
       car.lap = 0; car.lapStartT = 0; car.lapTimes = []; car.bestLap = 0; car.finished = false; car.turbo = 1;
+      car.startBoostT = 0; car.holdT = 0; car.startJudged = false;   // 完美起跑狀態
       this._syncRig(car, 0);
     });
     this.phase = "countdown";
+    this.paused = false;
     this.countdownT = COUNTDOWN_SECONDS; this._cdLast = 99;
     this.raceT = 0; this.finishOrder = []; this.results = null; this._allAiDoneT = 0; this._allAiDoneSaid = false;
     this.input = emptyInput(); this.input2 = emptyInput();
@@ -595,6 +604,7 @@ export class RacingGame {
 
   backToMenu() {
     this.phase = "menu";
+    this.paused = false;
     this.results = null;
     this._placeMenuCar();
     this._snapCams();
@@ -610,6 +620,40 @@ export class RacingGame {
     this._syncRig(car, 0);
     this.say(this.is2P() ? `${this._pName(car)} 放回賽道了,加油!` : "放回賽道了,加油!", 2);
     this._emit("rescue", { p: idx });
+  }
+
+  /* ───────────────────────── 暫停 / 完美起跑(v3) ───────────────────────── */
+
+  /** 暫停:只在倒數/比賽中(選單與結算不暫停,回傳 false)。整個世界凍住,render 照畫最後一幀。 */
+  setPaused(v) {
+    v = !!v;
+    if (v && !(this.phase === "countdown" || this.phase === "racing")) return false;
+    if (v !== this.paused) {
+      this.paused = v;
+      this._emit(v ? "pause" : "resume", {});
+      this.pushHud();
+    }
+    return this.paused;
+  }
+  togglePause() { return this.setPaused(!this.paused); }
+
+  /** GO 後前 window 秒:每位人類車手第一次踩油門時判一次(自動駕駛不判)。 */
+  _judgeStarts(dt) {
+    if (this.autopilot) return;
+    for (const p of this.players) {
+      if (p.startJudged) continue;
+      const inp = p.playerIdx === 1 ? this.input2 : this.input;
+      const on = (inp.throttle || 0) > 0;
+      const who = this.is2P() ? `${this._pName(p)} ` : "";
+      if (on) {
+        p.startJudged = true;
+        if ((p.holdT || 0) <= PERFECT_START.hold) {
+          p.startBoostT = PERFECT_START.boostSeconds;
+          this.say(`⚡ ${who}完美起跑!`, 2);
+          this._emit("perfectstart", { p: p.playerIdx });
+        } else this.say(`${who}起跑太早了,下次在 GO 的時候踩油門有加速!`, 2.5);
+      } else if (this.raceT > PERFECT_START.window) p.startJudged = true;
+    }
   }
 
   /* ───────────────────────── 迴圈 ───────────────────────── */
@@ -677,20 +721,26 @@ export class RacingGame {
 
   update(dt) {
     dt = Math.min(dt, 1 / 20);
+    if (this.paused) { this.pushHud(); return; }   // 暫停=整個世界凍住(連鏡頭與訊息計時都不推)
     this.time += dt;
     if (this.messageT > 0) { this.messageT -= dt; if (this.messageT <= 0) this.message = ""; }
 
     if (this.phase === "countdown") {
       this.countdownT -= dt;
+      // 完美起跑判定用:油門連續按住幾秒(倒數期間車不會動,只記時間)
+      for (const p of this.players) { const inp = p.playerIdx === 1 ? this.input2 : this.input; p.holdT = (inp.throttle || 0) > 0 ? (p.holdT || 0) + dt : 0; }
       const n = Math.ceil(this.countdownT);
       if (n < this._cdLast && n >= 1 && n <= 3) { this._cdLast = n; this.say(String(n), 1); this._emit("countdown", { n }); }
       if (this.countdownT <= 0) {
         this.phase = "racing"; this.raceT = 0;
         for (const c of this.cars) c.lapStartT = 0;
+        const cfgGo = DIFFICULTY[this.settings.difficulty] || DIFFICULTY.easy;
+        for (const c of this.cars) { const b = this.brains.get(c); if (!c.isPlayer && b && b.rnd() < cfgGo.aiSkill * PERFECT_START.aiChance) c.startBoostT = PERFECT_START.boostSeconds; }
         this.say("GO!", 1.2); this._emit("go", {});
       }
     } else if (this.phase === "racing" || this.phase === "finished") {
       this.raceT += dt;
+      if (this.phase === "racing" && this.raceT <= PERFECT_START.window + dt) this._judgeStarts(dt);
       this._stepRace(dt);
     }
 
@@ -714,7 +764,14 @@ export class RacingGame {
         if (car.finished) { input.throttle = Math.min(input.throttle, 0.35); input.boost = false; }   // 完賽=慢慢繞
       }
       // 人類車吃選單的「AI 輕扶回中」開關;AI 車照難度預設(它本來就會自己轉)
-      const evs = stepCar(car, input, dt, cfg, t, { raceT: this.raceT, assist: car.isPlayer ? assist : cfg.assist });
+      let evs;
+      if (car.startBoostT > 0) {
+        // 完美起跑:免費渦輪 —— 強制 boost、燃料退回;不碰 stepCar 物理(渦輪音效/火焰照走 boost 事件)
+        const turbo0 = car.turbo, tired0 = car.tired;
+        evs = stepCar(car, { ...input, boost: true }, dt, cfg, t, { raceT: this.raceT, assist: car.isPlayer ? assist : cfg.assist });
+        car.turbo = turbo0; car.tired = tired0;
+        car.startBoostT = Math.max(0, car.startBoostT - dt);
+      } else evs = stepCar(car, input, dt, cfg, t, { raceT: this.raceT, assist: car.isPlayer ? assist : cfg.assist });
       for (const e of evs) this._onCarEvent(car, e);
       if (!car.finished && car.lap >= this.settings.laps) {
         car.finished = true; car.finishTime = this.raceT;
@@ -780,6 +837,8 @@ export class RacingGame {
       rank, rank2, winner, mode: this.settings.mode, total: this.cars.length, medal, title,
       time: this.player.finishTime, time2: this.is2P() ? this.players[1].finishTime : null,
       bestLap: this.player.bestLap, laps: this.settings.laps, rows, trackLabel: this.track.label, difficulty: DIFFICULTY[this.settings.difficulty].label,
+      bestLap2: this.is2P() ? this.players[1].bestLap : null,
+      trackId: this.settings.trackId, difficultyId: this.settings.difficulty, trackLength: this.track.length,   // 給本機紀錄與排行房折算平均時速
     };
     this.say(`${medal} ${title}`, 5);
     for (const c of this.cams) if (c.view !== "cockpit") c.forceTv = true;    // 結算自動切轉播機位看自己繞場(駕駛座視角的人維持在車裡)
@@ -986,7 +1045,7 @@ export class RacingGame {
     const ranked = this.phase === "racing" || this.phase === "finished" ? this.rankedCars() : this.cars;
     const rank = p ? ranked.indexOf(p) + 1 : 1;
     return {
-      phase: this.phase, mode: this.settings.mode, two: this.is2P(),
+      phase: this.phase, mode: this.settings.mode, two: this.is2P(), paused: this.paused,
       assist: this.assistStrength(),
       p2: this._hudP2(ranked),
       countdown: this.phase === "countdown" ? Math.ceil(this.countdownT) : 0,

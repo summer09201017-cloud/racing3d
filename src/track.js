@@ -9,7 +9,7 @@
    AI 與圈數只看里程方向=ctrl 的排列順序=「正向」。
    heightKeys:[u(0..1), 高度 m] 關鍵影格,smoothstep 插值(race-stage-kit 範式)。
    halfW:路面半寬;shoulder:路肩草地寬(出界會變慢但還在跑);牆在 halfW+shoulder。 */
-export const TRACKS = {
+export const BASE_TRACKS = {
   meadow: {
     id: "meadow", label: "草原環道", emoji: "🌿",
     ctrl: [
@@ -44,6 +44,28 @@ export const TRACKS = {
     scenery: "pines",
   },
 };
+export const BASE_TRACK_IDS = Object.keys(BASE_TRACKS);
+
+/* ── 賽道變體(v3,0907):每條基底賽道展開成 正走 / 逆走 / 鏡像 / 鏡像逆走 四種(3 條變 12 條),純資料層。
+   逆走 = 控制點反序(起點不變、同一條路反方向開;均勻 Catmull-Rom 反序仍是同一條曲線)+ 高度剖面 u→1−u。
+   鏡像 = x 取負(左彎變右彎)。急彎牌 / 轉播機位 / AI 煞車 / 小地圖全由取樣曲率與座標自動算,一行程式都不用改。
+   id 規則:meadow / meadow-rev / meadow-mir / meadow-mirrev;label 正走不加後綴。 */
+export const TRACK_VARIANTS = ["", "rev", "mir", "mirrev"];
+export const VARIANT_LABELS = { "": "正走", rev: "逆走", mir: "鏡像", mirrev: "鏡像逆走" };
+export const trackIdOf = (base, variant) => (variant ? `${base}-${variant}` : base);
+export function variantOf(def, variant = "") {
+  if (!variant) return { ...def, base: def.id, variant: "" };
+  let ctrl = def.ctrl.map(([x, z]) => [x, z]);
+  let keys = def.heightKeys.map(([u, h]) => [u, h]);
+  if (variant.includes("mir")) ctrl = ctrl.map(([x, z]) => [-x, z]);
+  if (variant.includes("rev")) {
+    ctrl = [ctrl[0], ...ctrl.slice(1).reverse()];              // 起點不變、方向反
+    keys = keys.map(([u, h]) => [1 - u, h]).reverse();          // 高度沿里程反過來
+  }
+  return { ...def, id: trackIdOf(def.id, variant), base: def.id, variant, label: `${def.label}・${VARIANT_LABELS[variant]}`, ctrl, heightKeys: keys };
+}
+export const TRACKS = {};
+for (const id of BASE_TRACK_IDS) for (const v of TRACK_VARIANTS) { const d = variantOf(BASE_TRACKS[id], v); TRACKS[d.id] = d; }
 export const TRACK_IDS = Object.keys(TRACKS);
 
 const smoothstep = (t) => t * t * (3 - 2 * t);

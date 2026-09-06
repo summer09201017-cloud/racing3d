@@ -99,15 +99,64 @@ ok(await page.isVisible("#resultOverlay.visible"), "結算卡出現");
 const resText = await page.textContent("#resultOverlay");
 ok(!/undefined|NaN/.test(resText), "結算卡無 undefined/NaN");
 await page.screenshot({ path: OUT + "09-results.png" });
+// v3:結算紀錄行 / 彩帶(前三名才有)/ localStorage 已存
+const recText = await page.textContent("#recordText");
+ok(/紀錄/.test(recText) && !/undefined|NaN/.test(recText), `結算紀錄行「${recText}」`);
+const hasConf = await page.evaluate(() => !!document.querySelector("canvas[data-confetti]"));
+ok(hasConf === (fin.rank <= 3), `彩帶 ${hasConf ? "有" : "無"}(名次 ${fin.rank},前三名才放)`);
+ok(await page.evaluate(() => { try { const j = JSON.parse(localStorage.getItem("racing3d-records-v1")); return !!j && Object.keys(j.time).length >= 1 && Object.keys(j.lap).length >= 1; } catch { return false; } }), "紀錄已存 localStorage");
 // 回選單
 await page.click("#resultMenuButton");
 await page.waitForTimeout(500);
 ok(await page.isVisible("#homeScreen.visible"), "回選單");
 
+// ── v3(0907):方向變體 / 首頁紀錄 / 排行房掛鉤 / 暫停 ──
+ok(await page.evaluate(() => document.querySelectorAll("#variantSelect option").length === 4), "方向選單 4 檔(正走/逆走/鏡像/鏡像逆走)");
+await page.selectOption("#variantSelect", "rev");
+await page.waitForTimeout(300);
+const rev = await page.evaluate(() => ({ id: window.__racing3d.track.id, label: window.__racing3d.track.label }));
+ok(rev.id === "meadow-rev" && /逆走/.test(rev.label), `逆走賽道 ${rev.id}「${rev.label}」`);
+await page.screenshot({ path: OUT + "12-home-variant-rev.png" });
+await page.selectOption("#variantSelect", { index: 0 });
+await page.waitForTimeout(200);
+ok(await page.evaluate(() => window.__racing3d.track.id === "meadow"), "切回正走");
+const homeRec = await page.textContent("#homeRecord");
+ok(/最佳/.test(homeRec) && !/undefined|NaN/.test(homeRec), `首頁紀錄「${homeRec.slice(0, 48)}」`);
+ok(await page.evaluate(() => !!document.querySelector("script[data-hfpc-rank-game]")), "排行房 rank.js 掛鉤在 index.html");
+// 暫停:0 對手開一場,跑起來按 P → 凍住;繼續 → 跑;Esc=暫停;蓋版「回選單」
+await page.selectOption("#aiSelect", "0");
+await page.click("#startButton");
+await page.waitForTimeout(300);
+if (await page.isVisible("#helpOverlay.visible")) await page.click("#helpCloseButton");
+await page.evaluate(() => { window.__racing3d.autopilot = true; });
+await page.waitForTimeout(5000);
+ok(await page.evaluate(() => window.__racing3d.phase === "racing"), "暫停測試:跑起來了");
+ok(await page.isVisible("#pauseButton"), "比賽中 ⏸ 鈕可見");
+await page.keyboard.press("p");
+await page.waitForTimeout(200);
+const ps1 = await page.evaluate(() => ({ paused: window.__racing3d.paused, t: window.__racing3d.raceT, x: window.__racing3d.player.x }));
+ok(ps1.paused && await page.isVisible("#pauseOverlay.visible"), "P 鍵暫停、蓋版出現");
+ok((await page.textContent("#pauseButton")).includes("繼續"), "⏸ 鈕變「▶ 繼續」");
+await page.screenshot({ path: OUT + "13-pause.png" });
+await page.waitForTimeout(700);
+const ps2 = await page.evaluate(() => ({ t: window.__racing3d.raceT, x: window.__racing3d.player.x }));
+ok(ps2.t === ps1.t && ps2.x === ps1.x, "暫停 0.7 秒:計時與車位都凍住");
+await page.click("#pauseResumeButton");
+await page.waitForTimeout(500);
+const ps3 = await page.evaluate(() => ({ paused: window.__racing3d.paused, t: window.__racing3d.raceT }));
+ok(!ps3.paused && ps3.t > ps1.t && !(await page.isVisible("#pauseOverlay.visible")), "繼續後計時前進、蓋版關閉");
+await page.keyboard.press("Escape");
+await page.waitForTimeout(200);
+ok(await page.evaluate(() => window.__racing3d.paused), "Esc 在比賽中=暫停(不再直接作廢整場)");
+await page.click("#pauseMenuButton");
+await page.waitForTimeout(400);
+ok(await page.isVisible("#homeScreen.visible") && await page.evaluate(() => !window.__racing3d.paused && window.__racing3d.phase === "menu"), "暫停蓋版「回選單」");
+await page.selectOption("#aiSelect", "3");
+
 // ── v2(0906):選單新選項 / 人聲 manifest / 雙人同機分割畫面 ──
 ok(await page.isVisible("#modeSelect") && await page.isVisible("#assistSelect") && await page.isVisible("#gridSelect"), "選單有 模式/輔助/起跑格");
 const voice = await page.evaluate(async () => { try { const r = await fetch("./voice/manifest.json"); const j = await r.json(); return { ok: r.ok, n: Object.keys(j).length }; } catch (e) { return { ok: false, n: 0 }; } });
-ok(voice.ok && voice.n >= 18, `人聲 manifest 可讀(${voice.n} 句)`);
+ok(voice.ok && voice.n >= 20, `人聲 manifest 可讀(${voice.n} 句)`);
 const mp3 = await page.evaluate(async () => { const j = await (await fetch("./voice/manifest.json")).json(); const p = Object.values(j)[0]; const r = await fetch("./" + p); return { status: r.status, type: r.headers.get("content-type") || "" }; });
 ok(mp3.status === 200 && /audio|mpeg|octet/.test(mp3.type), `第一支 mp3 200(${mp3.type})`);
 const diffLabel = await page.$eval("#difficultySelect option[value=hard]", (o) => o.textContent);

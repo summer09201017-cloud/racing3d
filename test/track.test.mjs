@@ -1,6 +1,6 @@
 // track.test.mjs —— 賽道純算術層(node 直測,不用瀏覽器)
 import assert from "node:assert/strict";
-import { TRACKS, TRACK_IDS, buildTrack, posAt, nearest, pointAtOffset, heightAt, rightOfTangent, headingOfTangent, maxCurvatureAhead, tvCameraSpots, turnSign, wrapDist } from "../src/track.js";
+import { TRACKS, TRACK_IDS, BASE_TRACKS, BASE_TRACK_IDS, TRACK_VARIANTS, VARIANT_LABELS, trackIdOf, variantOf, buildTrack, posAt, nearest, pointAtOffset, heightAt, rightOfTangent, headingOfTangent, maxCurvatureAhead, tvCameraSpots, turnSign, wrapDist } from "../src/track.js";
 
 let n = 0;
 const ok = (cond, msg) => { n++; assert.ok(cond, msg); };
@@ -61,5 +61,37 @@ near(headingOfTangent(1, 0), Math.PI / 2, 1e-9, "heading of +x = π/2");
 const a = { tx: 0, tz: 1 }, b = { tx: -1, tz: 0 };
 const cross = a.tx * b.tz - a.tz * b.tx;
 ok(turnSign(cross) === 1, "右彎 cross>0 ⇒ turnSign +1");
+
+// ── v3 變體(0907):3 基底 × 4 方向 = 12 條;逆走=同一條路反方向(長度、起點相同,h(d)=原 h(L−d)、位置對應);鏡像=x 取負、曲率符號反
+ok(TRACK_IDS.length === BASE_TRACK_IDS.length * TRACK_VARIANTS.length && TRACK_IDS.length === 12, `共 ${TRACK_IDS.length} 條賽道`);
+for (const base of BASE_TRACK_IDS) {
+  const t0 = buildTrack(TRACKS[base]), tr = buildTrack(TRACKS[trackIdOf(base, "rev")]), tm = buildTrack(TRACKS[trackIdOf(base, "mir")]), tmr = buildTrack(TRACKS[trackIdOf(base, "mirrev")]);
+  ok(TRACKS[base].variant === "" && TRACKS[base].base === base && TRACKS[base].label === BASE_TRACKS[base].label, `${base} 正走=基底、不加後綴`);
+  ok(tr.label.endsWith("・逆走") && tm.label.endsWith("・鏡像") && tmr.label.endsWith("・鏡像逆走"), `${base} 變體有中文後綴`);
+  ok(tr.emoji === t0.emoji && tr.halfW === t0.halfW && tr.palette === t0.palette && tr.scenery === t0.scenery, `${base} 變體沿用 emoji/路寬/配色/景物`);
+  const L = t0.length;
+  for (const t of [tr, tm, tmr]) near(t.length, L, L * 0.003, `${t.id} 長度同基底`);
+  const p0 = posAt(t0, 0), pr = posAt(tr, 0);
+  near(Math.hypot(p0.x - pr.x, p0.z - pr.z), 0, 0.5, `${base} 逆走起點同一點`);
+  ok(p0.tx * pr.tx + p0.tz * pr.tz < -0.98, `${base} 逆走起點切線相反`);
+  for (const f of [0.1, 0.37, 0.5, 0.8]) {
+    const d = f * L;
+    near(heightAt(tr, d), heightAt(t0, L - d), 0.2, `${base} 逆走高度 h(d)=h0(L−d) @${f}`);
+    const a = posAt(tr, d), b = posAt(t0, L - d);
+    near(Math.hypot(a.x - b.x, a.z - b.z), 0, 0.8, `${base} 逆走位置對應 @${f}`);
+    const m = posAt(tm, d), o = posAt(t0, d);
+    near(m.x, -o.x, 0.05, `${base} 鏡像 x 取負 @${f}`); near(m.z, o.z, 0.05, `${base} 鏡像 z 不變 @${f}`);
+    near(heightAt(tm, d), heightAt(t0, d), 1e-6, `${base} 鏡像高度不變 @${f}`);
+  }
+  let flipped = 0, total = 0;
+  for (let i = 0; i < t0.N; i += 25) { if (Math.abs(t0.samples[i].k) > 0.003) { total++; if (Math.sign(tm.samples[i].k) === -Math.sign(t0.samples[i].k)) flipped++; } }
+  ok(total > 10 && flipped / total > 0.95, `${base} 鏡像曲率符號反(${flipped}/${total})`);
+  const maxK = Math.max(...tmr.samples.map((s) => Math.abs(s.k)));
+  ok(1 / maxK > tmr.wallDist, `${base} 鏡像逆走最小半徑仍 > 牆距`);
+  ok(tvCameraSpots(tr).every((s) => Math.abs(nearest(tr, s.x, s.z).lateral) > tr.wallDist + 5), `${base} 逆走機位在牆外`);
+}
+ok(trackIdOf("meadow", "") === "meadow" && trackIdOf("meadow", "mirrev") === "meadow-mirrev", "trackIdOf");
+ok(Object.keys(VARIANT_LABELS).length === 4 && TRACK_VARIANTS.every((v) => typeof VARIANT_LABELS[v] === "string"), "四種方向都有中文名");
+ok(variantOf(BASE_TRACKS.meadow, "rev").ctrl[0][0] === BASE_TRACKS.meadow.ctrl[0][0] && BASE_TRACKS.meadow.ctrl.length === 11, "variantOf 不改原資料、起點控制點不變");
 
 console.log(`track.test: ${n} 項通過`);
