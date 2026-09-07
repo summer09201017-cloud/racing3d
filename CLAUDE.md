@@ -40,6 +40,13 @@ Three.js 街機賽車:自由移動的車體 + 閉環樣條賽道(3 基底 × 4 �
 - 雙人:`car.playerIdx` = 視窗索引 = `cams` 索引 = P1/P2。單閘門 `is2P()`,別另開旗標。
 - 賽道 id:基底 `meadow`;變體 `meadow-rev` / `meadow-mir` / `meadow-mirrev`(`trackIdOf(base, variant)`)。正走 label 不加後綴,變體加「・逆走」等;`TRACKS[id].base / .variant` 給選單還原。變體是不同賽道 ⇒ 紀錄分開。
 
+## v6 選單版面(0907,使用者在 3D 撞球回報「版本與簡歷收不起來,選單上面被遮住」)
+
+- **版本簡歷可收合**:`game-must-haves/patches/fold-vertag.mjs` 把 `<p id="verTag">` 原封不動包進 `<details class="ver-fold">`,summary 那行仍寫版本與日期(收起來也看得到自己開到哪一版)。樣式含**打開時 max-height 46vh 可捲**——少了這條,「打開」只是把遮擋換個時機。
+- ★ **但收合只治了三成**:實測 390×844 選單內容 1833→1543px、可視區只有 791px,「開始比賽」與「今日挑戰」**三種尺寸下全都看不到**(連 1280×720 桌機都要捲到底)。真正的病是**最重要的鈕在最底下**。
+- ⇒ **兩顆鈕包進 `.home-actions` 並 `position: sticky; bottom: 0`**(上緣加漸層讓內容淡入底下)。選項再加也不會把它們擠出畫面。實測三尺寸都看得到、與 `#dailyHint` 零重疊。
+- ⚠ **跑外來補丁後要看 diff**:`fold-vertag.mjs` 寫回 `src/styles.css` 時整檔換行/內容被判成全新(387 行變更),實際只該多 17 行 ⇒ 從 `git show HEAD:` 取原檔、只 append 新增段再寫回,diff 才乾淨。**別讓一支補丁順手改掉整個檔案的形狀。**
+
 ## v5 道具層 + 今日挑戰(0907)
 
 - **道具不手工擺**:`buildItems(track, density)` 依**賽道幾何**生成——曲率 < `straightK` 放加速板(中線)、> `cornerK` 時擲骰放油漬(內側 0.42 半寬)或星星(外側 0.66 半寬);`trackId` 當 FNV 種子 ⇒ 同賽道每次一樣、12 條變體各自不同、**加新賽道不用補資料**。起跑線前後 `edgeGap` 40m 留白(不然一開賽就吃到)。
@@ -117,7 +124,7 @@ npm test && npm run build && npx wrangler deploy --name hfpc-racing3d --assets d
   ⚠ **為什麼是 Workers 不是 Pages**:CF 帳號被擋的**只有「建新 Pages 專案」**(code 8000030;四個不相關名字全被拒 ⇒ **帳號層級**,不是某個名字被封),**建新 Worker 名沒被擋**(0907 三次獨立實測 + 憫安站真的上線)⇒ 走 Workers assets,不必等申訴。想要 `pages.dev` 網址才要等桌面 `Cloudflare申訴信-2026-09-03.txt` 寄出並通過。
   ★ **為什麼趁 0907 搬**:換 origin 會讓玩家的**本機最佳紀錄(localStorage)歸零**——0907 統計是 2 開 1 完、全是驗收場,**還沒有孩子玩過**,所以這個代價當下等於零;一旦主日學用過就再也回不到這個價格。
   ★ **舊 Netlify 站的 301 殼**(源碼不在版控,三個檔,要重建時照抄):`_redirects` = `/*  https://hfpc-racing3d.summer09201017.workers.dev/:splat  301!`、`netlify.toml` = `[build] ignore = "exit 0"`、一頁 `index.html`(meta refresh + canonical + 一行「請把書籤改成新網址」)。部署:`npx netlify deploy --prod --dir . --site 4d240b0c-e780-4962-bf85-30779e678b64 --no-build`。
-- **更新流程(★ git push 不會上線,一定要重跑 deploy)**:見本段開頭的 wrangler 指令。殼層(index.html / sw.js / manifest / voice)有改就 bump sw `CACHE`(目前 `racing3d-v5`)。
+- **更新流程(★ git push 不會上線,一定要重跑 deploy)**:見本段開頭的 wrangler 指令。殼層(index.html / sw.js / manifest / voice)有改就 bump sw `CACHE`(目前 `racing3d-v6`)。
   ⚠ `--assets dist` 只上傳 build 產物 27 檔(源碼/設定/測試/文件都不在裡面,0907 逐條 curl 驗過全 404)⇒ **不需要 `.assetsignore`**(那只有 `--assets .` 才要)。
 - psPing id `racing3d`(index.html)、`racing3d-done` / `racing3d-dwell`(main.js)——beacon 只排除 localhost、不認 hostname,**換平台不用改、統計不斷線**;verTag 在 `index.html #verTag`。
 - **帳本(0907 搬站後現況)**:實際帶網址的只有**三處**,0907 都已改成 workers.dev 並線上驗過:①奧運頁卡 `Desktop/hfpc-olympics/index.html`(改完要 `wrangler deploy --name hfpc-olympics --assets .`)②作品集 `hfpc-portfolio/data.js`(同樣 wrangler)③`hfpc-claude-skills` 的 `references/machine-env-0714/gamefleet/sites.json`。
