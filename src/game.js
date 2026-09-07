@@ -8,7 +8,7 @@ import { TRACKS, TRACK_IDS, BASE_TRACKS, BASE_TRACK_IDS, TRACK_VARIANTS, VARIANT
 import { CAR, DIFFICULTY, ASSIST_MODES, ASSIST_LABELS, assistStrength, createCar, placeOnTrack, stepCar, emptyInput, rescue, forwardOf, rpm01, kmh, clamp, resolveCollisions } from "./vehicle.js";
 import { makeAiBrain, aiInput } from "./ai.js";
 import { VEHICLES, VEHICLE_IDS, AI_VEHICLE_MODES, AI_VEHICLE_LABELS, vehicleParams, aiVehicleFor } from "./vehicles.js";
-import { makeMotoRig, makeHorseRig, makeHoverRig } from "./rigs.js";
+import { makeMotoRig, makeHorseRig, makeHoverRig, makeRunnerRig } from "./rigs.js";
 import { ITEM_TYPES, buildItems, stepItems, respawnForCar } from "./items.js";
 import { dailyChallenge, dailyKey } from "./daily.js";
 
@@ -571,6 +571,7 @@ export class RacingGame {
     if (vehicle === "moto") return makeMotoRig(hex, opts, (VEHICLES.moto.over.wheelRadius || 0.34));
     if (vehicle === "horse") return makeHorseRig(hex, opts);
     if (vehicle === "hover") return makeHoverRig(hex, opts);
+    if (vehicle === "run") return makeRunnerRig(hex, opts);
     return this._makeCarRig(hex, opts);
   }
 
@@ -668,6 +669,7 @@ export class RacingGame {
       car.lap = 0; car.lapStartT = 0; car.lapTimes = []; car.bestLap = 0; car.finished = false; car.turbo = 1;
       car.startBoostT = 0; car.holdT = 0; car.startJudged = false;   // 完美起跑狀態
       car.oilT = 0; car.stars = 0; if (car.pickedIds) car.pickedIds.clear();   // v5 道具狀態
+      car.drift = 0; car.driftPeak = 0; car.lastRank = 0;   // v8 甩尾計量與名次播報
       this._syncRig(car, 0);
     });
     this.phase = "countdown";
@@ -883,6 +885,21 @@ export class RacingGame {
         } else if (this.phase === "racing") this.say(`${car.name} 完賽了!`, 2);
       }
     }
+    // v8 名次播報:每 0.35 秒比一次人類車的名次,升=超車、降=被超車、第一次進前三另一句
+    this._rankT = (this._rankT || 0) + dt;
+    if (this.phase === "racing" && this._rankT >= 0.35) {
+      this._rankT = 0;
+      const ranked = this.rankedCars();
+      for (const p of this.players) {
+        const r = ranked.indexOf(p) + 1;
+        const prev = p.lastRank || r;
+        if (r < prev) {
+          if (r <= 3 && prev > 3 && this.cars.length > 3) this._emit("top3", { p: p.playerIdx, rank: r });
+          else this._emit("overtake", { p: p.playerIdx, rank: r });
+        } else if (r > prev) this._emit("overtaken", { p: p.playerIdx, rank: r });
+        p.lastRank = r;
+      }
+    }
     for (const e of resolveCollisions(this.cars)) if (e.car.isPlayer) { const cs = this.cams[e.car.playerIdx]; cs.shake = Math.max(cs.shake, 0.25); this._emit("bump", { speed: e.speed, p: e.car.playerIdx }); }
     if (this.phase === "racing" && this.player && this.settings.aiCount > 0 && this.cars.every((c) => c.isPlayer || c.finished)) {
       this._allAiDoneT += dt;
@@ -912,6 +929,12 @@ export class RacingGame {
       else if (type === "ontrack") this._emit("ontrack", { p });
       else if (type === "rescue") { this.say(`${who}卡住了,放回賽道!`, 2); this._emit("rescue", { p }); }
       else if (type === "wrongway") { this.say(`⚠ ${who}方向反了!請掉頭`, 2.5); this._emit("wrongway", { p }); }
+      else if (type === "drift") {
+        car.startBoostT = Math.max(car.startBoostT || 0, e.seconds);   // 走完美起跑那條免費渦輪管線(燃料不扣)
+        car.driftPeak = 0;
+        this.say(`${who}🌀 甩尾漂亮!送你 ${e.seconds.toFixed(1)} 秒加速`, 1.8);
+        this._emit("drift", { p, seconds: e.seconds, charge: e.charge });
+      }
       else if (type === "boost") this._emit("boost", { p });
       else if (type === "boostend") this._emit("boostend", { p });
       else if (type === "lap") {
@@ -1163,7 +1186,7 @@ export class RacingGame {
       lap: Math.min(this.settings.laps, Math.max(1, p.lap + 1)), rank: ranked.indexOf(p) + 1,
       turbo: p.turbo, tired: !!p.tired, boosting: !!p.boosting, finished: !!p.finished,
       lapT: p.finished ? (p.lapTimes[p.lapTimes.length - 1] || 0) : Math.max(0, this.raceT - p.lapStartT), bestLap: p.bestLap,
-      wrongWay: !!p.wrongWay, offTrack: !!p.offTrack, stars: p.stars || 0, oiled: (p.oilT || 0) > 0,
+      wrongWay: !!p.wrongWay, offTrack: !!p.offTrack, stars: p.stars || 0, oiled: (p.oilT || 0) > 0, drift: p.drift || 0,
       camView: this.cams[1].view, camLabel: CAM_LABELS[this.cams[1].view], activeView: this.activeView(1),
       vehicle: p.vehicle,
     };
@@ -1190,7 +1213,7 @@ export class RacingGame {
       lapT: p ? (p.finished ? (p.lapTimes[p.lapTimes.length - 1] || 0) : Math.max(0, this.raceT - p.lapStartT)) : 0,
       bestLap: p ? p.bestLap : 0,
       wrongWay: !!(p && p.wrongWay), offTrack: !!(p && p.offTrack),
-      stars: p ? (p.stars || 0) : 0, oiled: !!(p && (p.oilT || 0) > 0), itemsOn: this.settings.items !== false, dailyKey: this.dailyKey,
+      stars: p ? (p.stars || 0) : 0, oiled: !!(p && (p.oilT || 0) > 0), drift: p ? (p.drift || 0) : 0, itemsOn: this.settings.items !== false, dailyKey: this.dailyKey,
       camView: this.cams[0].view, camLabel: CAM_LABELS[this.cams[0].view], activeView: this.activeView(0),
       message: this.message,
       results: this.results,

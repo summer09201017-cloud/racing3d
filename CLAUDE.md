@@ -40,6 +40,15 @@ Three.js 街機賽車:自由移動的車體 + 閉環樣條賽道(3 基底 × 4 �
 - 雙人:`car.playerIdx` = 視窗索引 = `cams` 索引 = P1/P2。單閘門 `is2P()`,別另開旗標。
 - 賽道 id:基底 `meadow`;變體 `meadow-rev` / `meadow-mir` / `meadow-mirrev`(`trackIdOf(base, variant)`)。正走 label 不加後綴,變體加「・逆走」等;`TRACKS[id].base / .variant` 給選單還原。變體是不同賽道 ⇒ 紀錄分開。
 
+## v8 使用者第二批四件(0907)
+
+- **年齡一鍵預設**:`AGE_PRESETS` 只設**難度/輔助/對手/圈數**四項 —— 賽道、載具、道具那些是口味,按一下不該把人家選的車換掉。三顆鈕依目前設定自動亮起(`matchedAge`);其餘下拉摺進 `<details class="adv-fold">`。★ **摺疊會讓既有驗收腳本操作不到那些下拉** ⇒ browser-check 開頭要先真 click 展開(0907 實踩:整支腳本第 34 行就 timeout)。
+- **甩尾計量**:`DRIFT`(minLat 2.2 / perUnit .34 / need 1 / maxHold 3.2 / secPer .42);按住手煞 **且** `|lat| > minLat` **且** 速度 > 6 才累積,放開才結算成免費渦輪(走 `startBoostT`,燃料不扣)。
+  ★ **測試取值時機**:滿舵甩久了 lat 會掉回門檻以下**當場結算歸零**,跑完才讀 `car.drift` 一定是 0 ⇒ 要**邊跑邊記 peak + 收事件**(0907 兩次都踩)。
+  ★ **層次**:物理在純函數層驗;遊戲層只驗 `_onCarEvent` 的接線(在遊戲層構造真甩尾很難——車會撞牆、速度上不去,硬測只會做出脆弱的紅燈);瀏覽器層只驗「玩法說明有寫、車體有欄位」。
+- **名次播報**:每 0.35 秒比一次人類車名次,升=`overtake`(第一次進前三改發 `top3`)、降=`overtaken`;四句唸稿已烤(24 支 mp3)。
+- **跑步(第五型)**:轉向 ×1.32、寬 0.7m、草地不減速;★ 原本 grip 1.2 讓它 43.3s **比誰都快** —— 三個優點疊起來太強,用抓地(1.0)與起步(0.85)付回去 ⇒ 45.9s,五型差 **3.5%**。
+
 ## v7 使用者實玩三件 + 載具第四型(0907,第一次真人回饋)
 
 - **路加寬**(「很容易撞到欄杆與開到路邊」):`halfW` 草原 7→9.5、沙漠 8→10.5、雪山 6.5→9,`shoulder` 同步。★ `track.test` 那條「最小轉彎半徑 > 牆距」加寬後仍成立(已驗);起跑格橫向、AI 車道、道具橫向都是**半寬的比例**,自動跟著變寬,不用改。
@@ -137,7 +146,7 @@ npm test && npm run build && npx wrangler deploy --name hfpc-racing3d --assets d
   ⚠ **為什麼是 Workers 不是 Pages**:CF 帳號被擋的**只有「建新 Pages 專案」**(code 8000030;四個不相關名字全被拒 ⇒ **帳號層級**,不是某個名字被封),**建新 Worker 名沒被擋**(0907 三次獨立實測 + 憫安站真的上線)⇒ 走 Workers assets,不必等申訴。想要 `pages.dev` 網址才要等桌面 `Cloudflare申訴信-2026-09-03.txt` 寄出並通過。
   ★ **為什麼趁 0907 搬**:換 origin 會讓玩家的**本機最佳紀錄(localStorage)歸零**——0907 統計是 2 開 1 完、全是驗收場,**還沒有孩子玩過**,所以這個代價當下等於零;一旦主日學用過就再也回不到這個價格。
   ★ **舊 Netlify 站的 301 殼**(源碼不在版控,三個檔,要重建時照抄):`_redirects` = `/*  https://hfpc-racing3d.summer09201017.workers.dev/:splat  301!`、`netlify.toml` = `[build] ignore = "exit 0"`、一頁 `index.html`(meta refresh + canonical + 一行「請把書籤改成新網址」)。部署:`npx netlify deploy --prod --dir . --site 4d240b0c-e780-4962-bf85-30779e678b64 --no-build`。
-- **更新流程(★ git push 不會上線,一定要重跑 deploy)**:見本段開頭的 wrangler 指令。殼層(index.html / sw.js / manifest / voice)有改就 bump sw `CACHE`(目前 `racing3d-v7`)。
+- **更新流程(★ git push 不會上線,一定要重跑 deploy)**:見本段開頭的 wrangler 指令。殼層(index.html / sw.js / manifest / voice)有改就 bump sw `CACHE`(目前 `racing3d-v8`)。
   ⚠ `--assets dist` 只上傳 build 產物 27 檔(源碼/設定/測試/文件都不在裡面,0907 逐條 curl 驗過全 404)⇒ **不需要 `.assetsignore`**(那只有 `--assets .` 才要)。
 - psPing id `racing3d`(index.html)、`racing3d-done` / `racing3d-dwell`(main.js)——beacon 只排除 localhost、不認 hostname,**換平台不用改、統計不斷線**;verTag 在 `index.html #verTag`。
 - **帳本(0907 搬站後現況)**:實際帶網址的只有**三處**,0907 都已改成 workers.dev 並線上驗過:①奧運頁卡 `Desktop/hfpc-olympics/index.html`(改完要 `wrangler deploy --name hfpc-olympics --assets .`)②作品集 `hfpc-portfolio/data.js`(同樣 wrangler)③`hfpc-claude-skills` 的 `references/machine-env-0714/gamefleet/sites.json`。

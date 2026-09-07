@@ -111,6 +111,17 @@ export class AudioManager {
       if (this.skid) this.skid.gain.gain.setTargetAtTime(this.enabled && active ? clamp(slip, 0, 1) * 0.06 : 0.0001, now, 0.06);
       return;
     }
+    if (kind === "steps") {
+      // 跑步:只有腳步聲(比馬蹄短促、頻率高一倍),站著不動安靜
+      e.gain.gain.setTargetAtTime(0.0001, now, 0.08);
+      const dt = this._stepLast ? Math.min(0.1, now - this._stepLast) : 0; this._stepLast = now;
+      if (active && rpm > 0.03) {
+        this._stepPhase = (this._stepPhase || 0) + dt * (3.2 + rpm * 8);
+        if (this._stepPhase >= 1) { this._stepPhase -= 1; this.noise({ dur: 0.035, gain: 0.05 + rpm * 0.06, f: 1100 + rpm * 500, q: 2.2 }); }
+      } else this._stepPhase = 0;
+      if (this.skid) this.skid.gain.gain.setTargetAtTime(0.0001, now, 0.06);
+      return;
+    }
     if (kind === "hover") {
       // 懸浮車:低頻嗡鳴 + 高泛音,沒有引擎的鋸齒感;速度只改音高與亮度
       const base = 62 + rpm * 120 + (boosting ? 30 : 0);

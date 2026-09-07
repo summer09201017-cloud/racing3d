@@ -30,6 +30,12 @@ await page.waitForTimeout(600);
 await page.screenshot({ path: OUT + "01-home.png" });
 ok(await page.isVisible("#homeScreen"), "首頁可見");
 
+// v8:十個下拉摺進「⚙️ 進階設定」了 ⇒ 後面要操作它們,先像真人一樣點開那一行
+ok(await page.evaluate(() => !document.getElementById("advFold").open), "進階設定預設摺疊(選單不再一長串)");
+await page.click(".adv-fold > summary");
+await page.waitForTimeout(200);
+ok(await page.evaluate(() => document.getElementById("advFold").open), "點一下就展開");
+
 // 選單:選 1 圈、3 對手、入門、藍車,真 click 開始
 await page.selectOption("#lapsSelect", "1");
 await page.selectOption("#aiSelect", "3");
@@ -154,8 +160,8 @@ ok(await page.isVisible("#homeScreen.visible") && await page.evaluate(() => !win
 await page.selectOption("#aiSelect", "3");
 
 // ── v4(0907):載具 賽車/摩托車/馬 ──
-ok(await page.evaluate(() => document.querySelectorAll("#vehicleSelect option").length === 4), "載具選單 4 型(含懸浮車)");
-ok(await page.evaluate(() => document.querySelectorAll("#aiVehicleSelect option").length === 5), "對手載具選單 5 檔(混搭 + 四型)");
+ok(await page.evaluate(() => document.querySelectorAll("#vehicleSelect option").length === 5), "載具選單 5 型(含跑步與懸浮車)");
+ok(await page.evaluate(() => document.querySelectorAll("#aiVehicleSelect option").length === 6), "對手載具選單 6 檔(混搭 + 五型)");
 // 0907 使用者:「對手要能選擇馬或摩托車或懸浮車」——指定後開一場,確認四台對手真的全是那一型
 await page.selectOption("#aiVehicleSelect", "hover");
 await page.selectOption("#aiSelect", "3");
@@ -376,6 +382,40 @@ await page.setViewportSize({ width: 1280, height: 720 });
 await page.waitForTimeout(250);
 ok(await page.evaluate(() => !document.querySelector(".ver-fold").open), "版本簡歷預設收合(不擠掉選單)");
 ok(await page.evaluate(() => /版本 v\d+/.test(document.querySelector(".ver-fold > summary").textContent)), "收合時 summary 仍看得到版號");
+
+// ── v8(0907 使用者第二批):年齡一鍵預設 / 進階摺疊 / 輔助四檔 / 甩尾 ──
+await page.click("#menuButton").catch(() => {});
+await page.waitForTimeout(300);
+ok(await page.evaluate(() => document.querySelectorAll(".age-btn").length === 3), "年齡一鍵預設 3 顆鈕");
+ok(await page.evaluate(() => document.querySelectorAll("#assistSelect option").length === 5), "輔助 5 檔(自動/輕/中/重/關)");
+for (const [id, want] of [["ageKid", { difficulty: "kids", assist: "strong", aiCount: "2", laps: "1" }], ["ageTeen", { difficulty: "normal", assist: "off", aiCount: "5", laps: "3" }]]) {
+  await page.click("#" + id);
+  await page.waitForTimeout(250);
+  const got = await page.evaluate(() => ({ difficulty: document.getElementById("difficultySelect").value, assist: document.getElementById("assistSelect").value, aiCount: document.getElementById("aiSelect").value, laps: document.getElementById("lapsSelect").value, on: [...document.querySelectorAll(".age-btn.on")].map((b) => b.id) }));
+  ok(got.difficulty === want.difficulty && got.assist === want.assist && got.aiCount === want.aiCount && got.laps === want.laps, `${id} 一鍵設好四項(${got.difficulty}/${got.assist}/${got.aiCount}台/${got.laps}圈)`);
+  ok(got.on.length === 1 && got.on[0] === id, `${id} 亮起來、其他熄滅`);
+}
+await page.screenshot({ path: OUT + "29-age-presets.png" });
+// 甩尾:手煞 + 打方向甩夠久,放開要送渦輪
+await page.click("#ageChild");
+await page.evaluate(() => { document.getElementById("advFold").open = true; });
+await page.selectOption("#aiSelect", "0");
+await page.selectOption("#vehicleSelect", "car");
+await page.click("#startButton");
+await page.waitForTimeout(400);
+if (await page.isVisible("#helpOverlay.visible")) await page.click("#helpCloseButton");
+await page.evaluate(() => { window.__racing3d.autopilot = true; });
+await page.waitForTimeout(5200);
+// 甩尾:物理與事件接線在 node 層驗(test/v8.test.mjs);瀏覽器只驗「玩家看得到這件事」——
+// 在遊戲層真的甩起來很難構造(車會撞牆、速度上不去),硬測只會做出一條脆弱的紅燈。
+const driftUi = await page.evaluate(() => ({
+  help: document.getElementById("helpOverlay").textContent,
+  hint: document.querySelector(".home-hint").textContent,
+  hasDriftEvent: typeof window.__racing3d.player.drift === "number",
+}));
+ok(driftUi.hasDriftEvent, "車體帶甩尾累積欄位");
+ok(/甩尾/.test(driftUi.help) && /加速|渦輪/.test(driftUi.help), "玩法說明講了甩尾會送加速");
+await page.evaluate(() => { window.__racing3d.autopilot = true; });
 
 ok(errors.length === 0, `0 pageerror(${errors.length})`);
 for (const e of errors) console.log("   ", e);

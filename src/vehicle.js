@@ -44,6 +44,19 @@ export const DIFFICULTY = {
    ★ 強度是乘在 PD 輸出上的係數,不是改 kP/kD —— 手感一致,只是「扶多用力」。 */
 /* 輔助的 PD 參數(量值可調):dead=半寬的幾成內完全不介入、kP 拉回力、kD 煞住衝過頭。 */
 export const ASSIST = { dead: 0.45, kP: 2.2, kD: 0.9 };
+
+/* 甩尾計量(v8,0907 使用者點名):按住手煞且真的在滑 ⇒ 累積;放開時依累積量送一段免費渦輪。
+   minLat  能開始累積的橫向滑移(m/s);太小的抖動不算
+   perUnit 累積速率(每「1 m/s 滑移 × 1 秒」得幾點)
+   need    至少要幾點才給獎勵(不然點一下手煞就有,變成無腦亂按)
+   maxHold 累積上限(對應最長獎勵)
+   secPer  每一點換幾秒渦輪 */
+export const DRIFT = { minLat: 2.2, perUnit: 0.34, need: 1, maxHold: 3.2, secPer: 0.42 };
+/** 累積量 → 獎勵秒數(0 = 不給)。純函數,測試直接驗。 */
+export function driftReward(charge) {
+  if (!(charge >= DRIFT.need)) return 0;
+  return Math.min(DRIFT.maxHold, charge) * DRIFT.secPer;
+}
 export const ASSIST_MODES = ["auto", "light", "medium", "strong", "off"];
 export const ASSIST_LABELS = {
   auto: "自動(照難度:幼兒/兒童/入門才扶)",
@@ -86,7 +99,8 @@ export function createCar({ x = 0, z = 0, heading = 0, y = 0, name = "車手", i
     turbo: 1, tired: false, boosting: false,
     trackIdx: -1, trackDist: 0, lateral: 0, latRate: 0, progress: 0, lap: 0,
     offTrack: false, wrongWay: false, wrongT: 0, stuckT: 0, bumpT: 0,
-    oilT: 0, stars: 0, pickedIds: null,   // v5 道具層:油漬剩餘秒數 / 撿到的星星 / 這一圈撿過的道具 id
+    oilT: 0, stars: 0, pickedIds: null,
+    drift: 0, driftPeak: 0,   // v8 甩尾計量:目前累積 / 這次甩尾的最高累積(給 HUD 與播報)   // v5 道具層:油漬剩餘秒數 / 撿到的星星 / 這一圈撿過的道具 id
     finished: false, finishTime: 0, lapTimes: [], lapStartT: 0, bestLap: 0,
     slopePitch: 0,
     wheelSpin: 0,
@@ -185,6 +199,18 @@ export function stepCar(car, input, dt, cfg, track, opts = {}) {
   car.lat += yaw * car.speed * P.slipGain * dt;    // yaw<0(右轉)⇒ lat<0(往左=外側);★ 要乘 dt(漏掉=每幀灌一秒的滑移,首跑實踩)
   car.lat *= Math.exp(-grip * dt);
   car.latAcc = (car.lat - latBefore) / dt;
+
+  // ── 甩尾計量(v8):按住手煞且真的在滑才累積;放開手煞時結算獎勵(事件由呼叫端接)
+  if (input.handbrake && Math.abs(car.lat) > DRIFT.minLat && Math.abs(car.speed) > 6) {
+    car.drift = Math.min(DRIFT.maxHold * 1.2, car.drift + (Math.abs(car.lat) - DRIFT.minLat) * DRIFT.perUnit * dt);
+    car.driftPeak = Math.max(car.driftPeak, car.drift);
+  } else if (car.drift > 0) {
+    const sec = driftReward(car.drift);
+    const charge = car.drift;
+    car.drift = 0;
+    if (sec > 0) events.push({ type: "drift", seconds: sec, charge });
+    else car.driftPeak = 0;
+  }
 
   // ── 位移
   const f = forwardOf(car.heading), r = rightOf(car.heading);

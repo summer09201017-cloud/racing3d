@@ -24,6 +24,14 @@ export const VEHICLES = {
     over: { turnRate: CAR.turnRate * 1.1, gripMul: 1.08, accelMul: 0.88, width: 1.2, length: 2.9, grassSpeedMul: 1.0, grassDrag: 0, turboBurn: CAR.turboBurn * 1.35, turboRegen: CAR.turboRegen * 0.85, wallBounce: 0.6, wheelRadius: 1.0 },
     eye: { x: 0, y: 2.98, z: -0.1 }, hood: { x: 0, y: 2.05, z: 1.55 },   // 眼位比騎士頭再高 25cm(0907 截圖:2.74 時馬頭正好擋在畫面中央)
   },
+  run: {
+    id: "run", label: "跑步", emoji: "🏃", rig: "run", sound: "steps", boostLabel: "衝刺", leanIn: false,
+    blurb: "用兩條腿跑:轉彎最靈活、草地完全不減速、身體最窄鑽得過;但起步慢、衝刺很快沒力。",
+    // 0907 掃 6 組:grip 1.0 / accel 0.85 ⇒ 草原 45.9s,五型差 3.5%。
+    // ★ 原本 grip 1.2 讓它 43.3s 比誰都快 —— 轉最靈活 + 草地不減速 + 最窄三個優點疊起來太強,要用抓地與起步付回去。
+    over: { turnRate: CAR.turnRate * 1.32, gripMul: 1.0, accelMul: 0.85, width: 0.7, length: 1.1, grassSpeedMul: 1.0, grassDrag: 0, turboBurn: CAR.turboBurn * 1.5, turboRegen: CAR.turboRegen * 0.8, wallBounce: 0.7, wheelRadius: 0.9 },
+    eye: { x: 0, y: 1.62, z: 0.12 }, hood: { x: 0, y: 1.2, z: 0.8 },
+  },
   hover: {
     id: "hover", label: "懸浮車", emoji: "🛸", rig: "hover", sound: "hover", boostLabel: "推進器", leanIn: false,
     blurb: "浮在地面上:草地完全不減速(想切哪就切哪)、轉向靈活;但很會漂,要提早修方向。",

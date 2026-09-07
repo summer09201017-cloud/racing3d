@@ -35,6 +35,7 @@ const ui = {
   difficultySelect: $("difficultySelect"), assistSelect: $("assistSelect"), gridSelect: $("gridSelect"), colorSelect: $("colorSelect"), audioSelect: $("audioSelect"),
   colorLabel: $("colorLabel"), startButton: $("startButton"),
   vehicleSelect: $("vehicleSelect"), aiVehicleSelect: $("aiVehicleSelect"), vehicle2Select: $("vehicle2Select"), vehicle2Label: $("vehicle2Label"), vehicleHint: $("vehicleHint"), turboLabel: $("turboLabel"), turboLabel2: $("turboLabel2"),
+  agePresets: $("agePresets"), advFold: $("advFold"),
   itemsSelect: $("itemsSelect"), starText: $("starText"), starText2: $("starText2"), dailyButton: $("dailyButton"), dailyHint: $("dailyHint"), dailyBadge: $("dailyBadge"),
   pauseButton: $("pauseButton"), pauseOverlay: $("pauseOverlay"), pauseResumeButton: $("pauseResumeButton"), pauseMenuButton: $("pauseMenuButton"),
   recordText: $("recordText"), homeRecord: $("homeRecord"), recText: $("recText"), recText2: $("recText2"),
@@ -85,6 +86,33 @@ fill(ui.vehicle2Select, vehicleItems, settings.vehicle2);
 fill(ui.aiVehicleSelect, AI_VEHICLE_MODES.map((m) => ({ value: m, label: AI_VEHICLE_LABELS[m] })), settings.aiVehicle);
 ui.audioSelect.value = audioEnabled ? "on" : "off";
 ui.itemsSelect.value = settings.items ? "on" : "off";
+
+/* 👶 年齡一鍵預設(0907 使用者點名):一顆鈕一次設好難度/輔助/對手/圈數。
+   ★ 只設「這四項」,賽道/載具/道具那些是口味,不在年齡預設的管轄內(不然按一下把人家選的車換掉)。 */
+const AGE_PRESETS = {
+  kid:   { difficulty: "kids",   assist: "strong", aiCount: 2, laps: 1 },
+  child: { difficulty: "child",  assist: "light",  aiCount: 3, laps: 2 },
+  teen:  { difficulty: "normal", assist: "off",    aiCount: 5, laps: 3 },
+};
+function matchedAge() {
+  for (const [k, p] of Object.entries(AGE_PRESETS)) {
+    if (p.difficulty === settings.difficulty && p.assist === settings.assist && p.aiCount === settings.aiCount && p.laps === settings.laps) return k;
+  }
+  return null;
+}
+function syncAgeButtons() {
+  const on = matchedAge();
+  for (const b of ui.agePresets.querySelectorAll(".age-btn")) b.classList.toggle("on", b.dataset.age === on);
+}
+function applyAge(key) {
+  const p = AGE_PRESETS[key];
+  if (!p) return;
+  Object.assign(settings, p);
+  saveSettings(p);
+  ui.difficultySelect.value = p.difficulty; ui.assistSelect.value = p.assist;
+  ui.aiSelect.value = String(p.aiCount); ui.lapsSelect.value = String(p.laps);
+  syncAgeButtons(); updateHomeRecord(); updateDailyHint(); audio.uiTap();
+}
 
 /* ── 遊戲 + 音效 + 人聲 ── */
 const audio = new AudioManager();
@@ -153,6 +181,9 @@ ui.itemsSelect.addEventListener("change", () => {
 });
 applyModeUi();
 updateVehicleHint();
+for (const b of ui.agePresets.querySelectorAll(".age-btn")) b.addEventListener("click", () => applyAge(b.dataset.age));
+for (const sel of [ui.difficultySelect, ui.assistSelect, ui.aiSelect, ui.lapsSelect]) sel.addEventListener("change", syncAgeButtons);
+syncAgeButtons();
 
 /* ── 本機最佳紀錄(v3):每組「賽道×圈數×難度」記最佳總時間、「賽道×難度」記最佳單圈;首頁與 HUD 都看得到目標 ── */
 let records = loadRecords();
@@ -500,6 +531,7 @@ game.onEvent = (type, d) => {
     case "playerfinish": audio.lap(true); break;
     case "pause": case "resume": audio.uiTap(); break;
     case "item": if (d.type === "boost") audio.itemBoost(); else if (d.type === "star") audio.itemStar(); else audio.itemOil(); break;
+    case "drift": audio.itemBoost(); break;
     case "finish": showResults(d); audio.finish(d.mode === "duel2p" ? 1 : d.rank); sendDone(); break;
     default: break;
   }

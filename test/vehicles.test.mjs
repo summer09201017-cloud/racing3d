@@ -21,7 +21,7 @@ const mk = (vehicle, trk, dist, lat) => { const car = createCar({ vehicle, param
 
 // ① 資料層
 {
-  ok(VEHICLE_IDS.length === 4 && ["car", "moto", "horse", "hover"].every((id) => VEHICLE_IDS.includes(id)), "四型:car / moto / horse / hover");
+  ok(VEHICLE_IDS.length === 5 && ["car", "moto", "horse", "run", "hover"].every((id) => VEHICLE_IDS.includes(id)), "五型:car / moto / horse / run / hover");
   for (const id of VEHICLE_IDS) {
     const v = VEHICLES[id];
     ok(v.label && v.emoji && v.rig && v.sound && v.boostLabel && v.blurb && v.eye && v.hood, `${id} 資料齊(名字/emoji/外型/音色/衝刺名/說明/眼位)`);
@@ -38,14 +38,18 @@ const mk = (vehicle, trk, dist, lat) => { const car = createCar({ vehicle, param
   const pv = vehicleParams("hover");
   ok(pv.grassSpeedMul === 1 && pv.grassDrag === 0 && pv.slipGain > pc.slipGain && pv.gripMul < pc.gripMul && pv.turnRate > pc.turnRate, "懸浮車:草地不減速 / 轉向靈活 / 但很會漂、抓地差(零和)");
   ok(pv.slipGain > pm.slipGain && pv.slipGain > pc.slipGain, "懸浮車比誰都會漂(難控感來自甩出去的量,不是抓地低——抓地太低只會單純變慢)");
+  const pr = vehicleParams("run");
+  ok(pr.turnRate > pm.turnRate && pr.width < pm.width && pr.grassSpeedMul === 1 && pr.grassDrag === 0, "跑步:轉最靈活、身體最窄、草地不減速");
+  ok(pr.gripMul <= ph.gripMul, "跑步抓地不比馬好(三個優點疊起來太強,要用抓地付回去:grip 1.2 時它 43.3s 比誰都快)");
+  ok(pr.accelMul < 1 && pr.turboBurn > pc.turboBurn * 1.4, "跑步的代價:起步慢、衝刺很快沒力(零和)");
   ok(vehicleParams("nope").turnRate === CAR.turnRate, "亂值回賽車");
   const set = new Set([0, 1, 2, 3, 4].map((i) => aiVehicleFor(i, 2)));
-  ok(set.size === 4 && aiVehicleFor(0, 2) !== aiVehicleFor(1, 2), "AI 混搭:輪流拿、≥2 台不同種");
+  ok(set.size === 5 && aiVehicleFor(0, 2) !== aiVehicleFor(1, 2), "AI 混搭:輪流拿、≥2 台不同種");
   // ★ 0907 使用者:「對手要能選擇馬或摩托車或懸浮車」⇒ 指定某型就全部同一型
-  ok(AI_VEHICLE_MODES.length === 5 && AI_VEHICLE_MODES[0] === "mix", `對手載具 5 檔(混搭 + 四型)${AI_VEHICLE_MODES.join("/")}`);
+  ok(AI_VEHICLE_MODES.length === 6 && AI_VEHICLE_MODES[0] === "mix", `對手載具 6 檔(混搭 + 五型)${AI_VEHICLE_MODES.join("/")}`);
   for (const m of AI_VEHICLE_MODES) ok(typeof AI_VEHICLE_LABELS[m] === "string" && AI_VEHICLE_LABELS[m].length > 0, `對手載具 ${m} 有中文名`);
   for (const id of VEHICLE_IDS) ok([0, 1, 2, 3, 4].every((i) => aiVehicleFor(i, 7, id) === id), `指定 ${id} ⇒ 五台對手全開 ${id}`);
-  ok(new Set([0, 1, 2, 3].map((i) => aiVehicleFor(i, 1, "mix"))).size === 4, "mix ⇒ 四台各不同");
+  ok(new Set([0, 1, 2, 3, 4].map((i) => aiVehicleFor(i, 1, "mix"))).size === 5, "mix ⇒ 五台各不同");
   ok(aiVehicleFor(0, 1, "nope") === aiVehicleFor(0, 1, "mix"), "亂值當 mix");
 }
 
@@ -110,7 +114,7 @@ const mk = (vehicle, trk, dist, lat) => { const car = createCar({ vehicle, param
   g.startRace({ trackId: "meadow", laps: 1, aiCount: 5, difficulty: "normal", vehicle: "moto" });
   ok(g.player.vehicle === "moto" && g.rigs.get(g.player).kind === "moto", "開賽玩家用選的載具");
   const aiKinds = new Set(g.cars.filter((c) => !c.isPlayer).map((c) => c.vehicle));
-  ok(aiKinds.size === 4, `AI 5 台混搭四型 ${[...aiKinds].join("/")}`);
+  ok(aiKinds.size === 5, `AI 5 台混搭五型 ${[...aiKinds].join("/")}`);
   // 指定對手載具:全部同一型
   g.startRace({ trackId: "meadow", laps: 1, aiCount: 4, difficulty: "normal", vehicle: "car", aiVehicle: "hover" });
   ok(g.cars.filter((c) => !c.isPlayer).every((c) => c.vehicle === "hover"), "指定懸浮車 ⇒ 四台對手全是懸浮車");

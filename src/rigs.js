@@ -95,6 +95,67 @@ export function makeMotoRig(hex, { interior = false } = {}, wheelRadius = 0.34) 
   return { group, tilt, wheels, hide, flame, cockpit, tailMat, paint, kind: "moto", leanIn: true, anim: null };
 }
 
+/* ═══════════════════════ 🏃 跑步 ═══════════════════════ */
+// 3d-figure-kit 鐵則:矩形身體(Box 不用圓筒)、長腿、臉部齊(眼白+瞳孔+微笑+耳前無髮)。
+export function makeRunnerRig(hex, { interior = false } = {}) {
+  const group = new THREE.Group(), tilt = new THREE.Group(); group.add(tilt);
+  const paint = lambert(hex), dark = lambert(0x1f2229);
+  const skin = lambert(0xf1c9a5, { emissive: 0x8a7355, emissiveIntensity: 0.45 });
+  const hide = [];
+  // 矩形軀幹(胸腹髖三段)
+  const body = new THREE.Group(); body.position.y = 1.02; tilt.add(body);
+  put(box(0.42, 0.34, 0.24, paint), 0, 0.2, 0, body);      // 胸
+  put(box(0.38, 0.22, 0.22, paint), 0, -0.06, 0, body);    // 腹
+  put(box(0.4, 0.18, 0.23, dark), 0, -0.24, 0, body);      // 髖(短褲)
+  hide.push(body);
+  const head = makeRiderHead(paint, skin); head.position.set(0, 1.42, 0); tilt.add(head); hide.push(head);
+  // 長腿(大腿+小腿+腳掌),pivot=髖
+  const legs = [];
+  for (const sx of [-1, 1]) {
+    const pivot = new THREE.Group(); pivot.position.set(sx * 0.13, 0.78, 0); tilt.add(pivot);
+    put(box(0.15, 0.44, 0.16, skin), 0, -0.22, 0, pivot);
+    const knee = new THREE.Group(); knee.position.y = -0.44; pivot.add(knee);
+    put(box(0.13, 0.42, 0.14, skin), 0, -0.21, 0, knee);
+    put(box(0.15, 0.09, 0.28, dark), 0, -0.44, 0.06, knee);
+    legs.push({ pivot, knee, sx });
+  }
+  // 手臂(擺動)
+  const arms = [];
+  for (const sx of [-1, 1]) {
+    const pivot = new THREE.Group(); pivot.position.set(sx * 0.26, 1.18, 0); tilt.add(pivot);
+    put(new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.34, 8), skin), 0, -0.17, 0, pivot);
+    const elbow = new THREE.Group(); elbow.position.y = -0.34; pivot.add(elbow);
+    put(new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.3, 8), skin), 0, -0.15, 0.04, elbow);
+    elbow.rotation.x = -1.3;
+    arms.push({ pivot, sx });
+  }
+  // 衝刺塵土(flame 契約)
+  const flame = put(new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.7, 8), new THREE.MeshBasicMaterial({ color: 0xd9c39a, transparent: true, opacity: 0.5 })), 0, 0.25, -0.7, tilt);
+  flame.rotation.x = -Math.PI / 2; flame.visible = false;
+  const shadow = new THREE.Mesh(new THREE.CircleGeometry(1, 18), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.3, depthWrite: false }));
+  shadow.rotation.x = -Math.PI / 2; shadow.scale.set(0.42, 0.6, 1); shadow.position.y = 0.02; group.add(shadow);
+  // 第一人稱:沒有儀表板可放 ⇒ 只留一個貼在視野下緣的小速度表(不擋路)
+  let cockpit = null;
+  if (interior) {
+    cockpit = new THREE.Group(); tilt.add(cockpit);
+    const g = makeGauge(0.075); g.group.position.set(0.26, 1.3, 0.34); g.group.rotation.x = -0.5; cockpit.add(g.group);
+    cockpit.userData = { wheel: new THREE.Group(), wheelAxis: "z", wheelGain: 0, needlePivot: g.needlePivot };
+  }
+  // 跑步循環:腿前後擺、膝蓋彎、手臂反相、身體上下起伏(wheelRadius 0.9 ⇒ wheelSpin 當步頻)
+  const anim = (car) => {
+    const t = car.wheelSpin, spd = Math.abs(car.speed);
+    const amp = clamp(spd / 16, 0, 0.95);
+    for (const l of legs) {
+      const ph = l.sx > 0 ? 0 : Math.PI;
+      l.pivot.rotation.x = Math.sin(t + ph) * amp;
+      l.knee.rotation.x = -Math.max(0, Math.sin(t + ph + 1.1)) * amp * 1.5;
+    }
+    for (const a of arms) a.pivot.rotation.x = Math.sin(t + (a.sx > 0 ? Math.PI : 0)) * amp * 0.75;
+    tilt.position.y = Math.abs(Math.sin(t)) * 0.055 * Math.min(1, spd / 12);
+    body.rotation.x = 0.12 + Math.min(0.22, spd / 90);   // 越快身體越前傾
+  };
+  return { group, tilt, wheels: [], hide, flame, cockpit, tailMat: null, paint, kind: "run", leanIn: false, anim };
+}
 /* ═══════════════════════ 🛸 懸浮車 ═══════════════════════ */
 export function makeHoverRig(hex, { interior = false } = {}) {
   const group = new THREE.Group(), tilt = new THREE.Group(); group.add(tilt);
