@@ -92,7 +92,8 @@ Three.js 街機賽車:自由移動的車體 + 閉環樣條賽道(3 基底 × 4 �
 **2026-09-06 v2 上線 Netlify(direct upload,未接 GitHub auto-build)**:<https://new-hfpc-racing3d.netlify.app>
 site id `4d240b0c-e780-4962-bf85-30779e678b64`;源碼 GitHub `summer09201017-cloud/racing3d`(main)。
 
-- **為什麼不是 CF**:Cloudflare 帳號 2026-09-03 起 ToS 審查(CF 原信只禁「加新網域」;「不建新 Pages/Worker」是我們 0903 自訂的預防規則),0904 使用者拍板「凍結期間純靜態新站先上 Netlify、站名加 `new-` 前綴」。審查解除後再搬 CF Pages(`hfpc-racing3d`),見 `roadmap.md` 待做第 1 項。
+- **為什麼不是 CF**:Cloudflare 帳號 2026-09-03 起 ToS 審查,0904 使用者拍板「凍結期間純靜態新站先上 Netlify、站名加 `new-` 前綴」。
+  ⚠ **0907 事實更新**(0907-全艦隊健檢報告 場實測):被擋的**只有「建新 Pages 專案」**(code 8000030),**建新 Worker 名沒被擋** ⇒ 真要搬,`wrangler deploy --name hfpc-racing3d --assets dist` 現在就能走,不必等申訴;**但換 origin 會讓玩家的本機最佳紀錄歸零**,要使用者拍板。見 `roadmap.md` C 級那條。
 - **更新流程(★ git push 不會上線,一定要重跑 deploy)**:
   `npm test && npm run build && netlify deploy --prod --dir dist --site 4d240b0c-e780-4962-bf85-30779e678b64 --no-build`
   → `CHECK_URL=https://new-hfpc-racing3d.netlify.app node scripts/browser-check.mjs`。殼層(index.html / sw.js / manifest / voice)有改就 bump sw `CACHE`(目前 `racing3d-v4`)。

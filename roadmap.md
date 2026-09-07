@@ -55,7 +55,7 @@
 | B | 跳台飛越 | 4 時 | ★☆☆ | 車高度要從賽道解耦,77 項車體測試跟著動,風險中 |
 | B | 背景音樂 | 1.5 時 | ★☆☆ | 引擎聲 + 播報已滿,建議先不做 |
 | C | 賽道編輯器 | 1 天+ | ★☆☆ | 老師會不會用是問號,先看統計 |
-| C | **搬回 Cloudflare Pages** | 20 分 | 卡審查 | 等 CF 帳號 ToS 審查解除。站名 `hfpc-racing3d`,照 `netlify-to-cloudflare-migrate` 九步;搬完改帳本四處網址。`?g=racing3d` 統計鍵不變,但 origin 變 ⇒ 已裝的 PWA 要重裝、本機紀錄(localStorage)會歸零 |
+| C | **搬離 Netlify 到 Cloudflare** | 30 分 | ★★☆ **待拍板** | ⚠ 0907 事實更新(0907-全艦隊健檢報告 場實測):CF 帳號**只有「建新 Pages 專案」被擋**(code 8000030),**建新 Worker 名沒被擋** ⇒ 走 `wrangler deploy --name hfpc-racing3d --assets dist` **現在就能搬,不必等申訴**。要搬的理由=Netlify 自動重 build 燒點數。**代價**:①帳本四處網址要一起改(奧運頁卡 / 作品集 / play-stats NAMES / sites.json 兩份)②`?g=racing3d` 統計鍵不變但 **origin 變** ⇒ 已裝的 PWA 要重裝、**本機最佳紀錄(localStorage)歸零**③舊 Netlify 站要留 301 一個月。⇒ **等使用者拍板再動** |
 
 ## 🚫 刻意不做
 
