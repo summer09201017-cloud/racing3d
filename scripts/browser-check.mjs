@@ -327,6 +327,39 @@ await page.click("#resultMenuButton");
 await page.waitForTimeout(400);
 ok(await page.isVisible("#homeScreen.visible") && !(await page.evaluate(() => document.body.classList.contains("duel2p"))), "回選單、duel2p class 移除");
 await page.selectOption("#modeSelect", "solo");
+// ── v6(0907):選單版面 —— 兩顆開始鈕在小螢幕也要看得到,且捲到底時不能蓋住任何內容 ──
+// 由來:使用者在 3D 撞球回報「版本與簡歷收不起來,選單上面被遮住了」。racing3d 的形式是
+// 「選單十個下拉 + 三段說明 + 簡歷 = 1543px,可視區只有 791px ⇒ 開始鈕三尺寸全看不到」。
+// ★ 只驗「捲到底」:沒捲完時行動列本來就該浮在內容上(那是 sticky 的用途,已加漸層淡入)。
+await page.click("#menuButton").catch(() => {});
+await page.waitForTimeout(300);
+for (const [vw, vh] of [[390, 844], [844, 390], [1280, 720]]) {
+  await page.setViewportSize({ width: vw, height: vh });
+  await page.waitForTimeout(350);
+  const m = await page.evaluate(() => {
+    const card = document.querySelector(".home-card"), act = document.querySelector(".home-actions");
+    card.scrollTop = card.scrollHeight;
+    const ab = act.getBoundingClientRect();
+    const covered = [];
+    for (const el of card.children) {
+      if (el === act) continue;
+      const r = el.getBoundingClientRect();
+      if (r.height === 0) continue;
+      const ov = Math.min(ab.bottom, r.bottom) - Math.max(ab.top, r.top);
+      if (ov > 1) covered.push((el.id || el.className || el.tagName) + " " + Math.round(ov) + "px");
+    }
+    const s = document.getElementById("startButton").getBoundingClientRect();
+    const d = document.getElementById("dailyButton").getBoundingClientRect();
+    return { covered, startOk: s.top >= 0 && s.bottom <= innerHeight, dailyOk: d.top >= 0 && d.bottom <= innerHeight };
+  });
+  ok(m.startOk && m.dailyOk, `${vw}×${vh} 開始鈕與今日挑戰鈕都看得到`);
+  ok(m.covered.length === 0, `${vw}×${vh} 捲到底時行動列沒蓋住任何內容${m.covered.length ? "(" + m.covered.join(", ") + ")" : ""}`);
+}
+await page.setViewportSize({ width: 1280, height: 720 });
+await page.waitForTimeout(250);
+ok(await page.evaluate(() => !document.querySelector(".ver-fold").open), "版本簡歷預設收合(不擠掉選單)");
+ok(await page.evaluate(() => /版本 v\d+/.test(document.querySelector(".ver-fold > summary").textContent)), "收合時 summary 仍看得到版號");
+
 ok(errors.length === 0, `0 pageerror(${errors.length})`);
 for (const e of errors) console.log("   ", e);
 await browser.close();

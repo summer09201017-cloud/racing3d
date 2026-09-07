@@ -28,8 +28,8 @@ racing3d 交接 — 2026-09-07(v3 暫停/變體/紀錄/完美起跑/彩帶/排�
 
 - 驗收(0907 實跑,不是憑印象):
   · npm test **3037** 項全綠 = track 806 / vehicle 79 / race 162 / race2p 60 / commentary 86 / v3 74 / vehicles 177 / **v5 1593**
-  · npm run check:local 真瀏覽器 **96/96**,截圖 screenshots/(v5 新增 19-items-track / 20-items-results / 21-home-daily / 22-daily-race / 23-deeplink-daily / 24-item-{boost,oil,star} / 25-items-bird)
-  · 線上 CHECK_URL browser-check **96/96**(對 CF Workers 正址跑,見 CLAUDE.md 部署段);線上 sw = racing3d-v5
+  · npm run check:local 真瀏覽器 **104/104**(v6 新增 8 條選單版面守門:三尺寸鈕可見 + 捲到底零遮蓋 + 簡歷收合),截圖 screenshots/(v5 新增 19-items-track / 20-items-results / 21-home-daily / 22-daily-race / 23-deeplink-daily / 24-item-{boost,oil,star} / 25-items-bird)
+  · 線上 CHECK_URL browser-check **104/104**(對 CF Workers 正址跑,見 CLAUDE.md 部署段);線上 sw = racing3d-v5
 
 - 版控與部署:
   · GitHub https://github.com/summer09201017-cloud/racing3d(main)
