@@ -6,7 +6,7 @@
 import assert from "node:assert/strict";
 import { TRACKS, buildTrack } from "../src/track.js";
 import { CAR, DIFFICULTY, createCar, placeOnTrack, stepCar, emptyInput, resolveCollisions } from "../src/vehicle.js";
-import { VEHICLES, VEHICLE_IDS, vehicleParams, aiVehicleFor } from "../src/vehicles.js";
+import { VEHICLES, VEHICLE_IDS, AI_VEHICLE_MODES, AI_VEHICLE_LABELS, vehicleParams, aiVehicleFor } from "../src/vehicles.js";
 import { RacingGame, CAM_VIEWS } from "../src/game.js";
 
 let n = 0;
@@ -21,7 +21,7 @@ const mk = (vehicle, trk, dist, lat) => { const car = createCar({ vehicle, param
 
 // ① 資料層
 {
-  ok(VEHICLE_IDS.length === 3 && VEHICLE_IDS.includes("car") && VEHICLE_IDS.includes("moto") && VEHICLE_IDS.includes("horse"), "三型:car / moto / horse");
+  ok(VEHICLE_IDS.length === 4 && ["car", "moto", "horse", "hover"].every((id) => VEHICLE_IDS.includes(id)), "四型:car / moto / horse / hover");
   for (const id of VEHICLE_IDS) {
     const v = VEHICLES[id];
     ok(v.label && v.emoji && v.rig && v.sound && v.boostLabel && v.blurb && v.eye && v.hood, `${id} 資料齊(名字/emoji/外型/音色/衝刺名/說明/眼位)`);
@@ -35,9 +35,18 @@ const mk = (vehicle, trk, dist, lat) => { const car = createCar({ vehicle, param
   const pm = vehicleParams("moto"), ph = vehicleParams("horse");
   ok(pm.turnRate > pc.turnRate && pm.gripMul < 1 && pm.width < pc.width && pm.grassSpeedMul < pc.grassSpeedMul && pm.accelMul > 1, "摩托車:轉快 / 抓地差 / 窄 / 草地更慢 / 起步快(零和)");
   ok(ph.grassSpeedMul === 1 && ph.grassDrag === 0 && ph.gripMul > 1 && ph.accelMul < 1 && ph.turboBurn > pc.turboBurn, "馬:草地不減速 / 抓地好 / 起步慢 / 衝刺耗快(零和)");
+  const pv = vehicleParams("hover");
+  ok(pv.grassSpeedMul === 1 && pv.grassDrag === 0 && pv.slipGain > pc.slipGain && pv.gripMul < pc.gripMul && pv.turnRate > pc.turnRate, "懸浮車:草地不減速 / 轉向靈活 / 但很會漂、抓地差(零和)");
+  ok(pv.slipGain > pm.slipGain && pv.slipGain > pc.slipGain, "懸浮車比誰都會漂(難控感來自甩出去的量,不是抓地低——抓地太低只會單純變慢)");
   ok(vehicleParams("nope").turnRate === CAR.turnRate, "亂值回賽車");
   const set = new Set([0, 1, 2, 3, 4].map((i) => aiVehicleFor(i, 2)));
-  ok(set.size === 3 && aiVehicleFor(0, 2) !== aiVehicleFor(1, 2), "AI 混搭:輪流拿、≥2 台不同種");
+  ok(set.size === 4 && aiVehicleFor(0, 2) !== aiVehicleFor(1, 2), "AI 混搭:輪流拿、≥2 台不同種");
+  // ★ 0907 使用者:「對手要能選擇馬或摩托車或懸浮車」⇒ 指定某型就全部同一型
+  ok(AI_VEHICLE_MODES.length === 5 && AI_VEHICLE_MODES[0] === "mix", `對手載具 5 檔(混搭 + 四型)${AI_VEHICLE_MODES.join("/")}`);
+  for (const m of AI_VEHICLE_MODES) ok(typeof AI_VEHICLE_LABELS[m] === "string" && AI_VEHICLE_LABELS[m].length > 0, `對手載具 ${m} 有中文名`);
+  for (const id of VEHICLE_IDS) ok([0, 1, 2, 3, 4].every((i) => aiVehicleFor(i, 7, id) === id), `指定 ${id} ⇒ 五台對手全開 ${id}`);
+  ok(new Set([0, 1, 2, 3].map((i) => aiVehicleFor(i, 1, "mix"))).size === 4, "mix ⇒ 四台各不同");
+  ok(aiVehicleFor(0, 1, "nope") === aiVehicleFor(0, 1, "mix"), "亂值當 mix");
 }
 
 // ② 物理
@@ -101,7 +110,16 @@ const mk = (vehicle, trk, dist, lat) => { const car = createCar({ vehicle, param
   g.startRace({ trackId: "meadow", laps: 1, aiCount: 5, difficulty: "normal", vehicle: "moto" });
   ok(g.player.vehicle === "moto" && g.rigs.get(g.player).kind === "moto", "開賽玩家用選的載具");
   const aiKinds = new Set(g.cars.filter((c) => !c.isPlayer).map((c) => c.vehicle));
-  ok(aiKinds.size === 3, `AI 5 台混搭三型 ${[...aiKinds].join("/")}`);
+  ok(aiKinds.size === 4, `AI 5 台混搭四型 ${[...aiKinds].join("/")}`);
+  // 指定對手載具:全部同一型
+  g.startRace({ trackId: "meadow", laps: 1, aiCount: 4, difficulty: "normal", vehicle: "car", aiVehicle: "hover" });
+  ok(g.cars.filter((c) => !c.isPlayer).every((c) => c.vehicle === "hover"), "指定懸浮車 ⇒ 四台對手全是懸浮車");
+  ok(g.player.vehicle === "car", "指定對手載具不影響玩家自己選的");
+  g.startRace({ trackId: "meadow", laps: 1, aiCount: 3, difficulty: "normal", aiVehicle: "horse" });
+  ok(g.cars.filter((c) => !c.isPlayer).every((c) => c.vehicle === "horse") && g.cars.filter((c) => !c.isPlayer).every((c) => c.params.grassDrag === 0), "指定馬 ⇒ 三台都吃馬的參數");
+  g.startRace({ trackId: "meadow", laps: 1, aiCount: 3, difficulty: "normal", aiVehicle: "nope" });
+  ok(g.settings.aiVehicle === "mix", "對手載具亂值回 mix");
+  g.startRace({ trackId: "meadow", laps: 1, aiCount: 5, difficulty: "normal", vehicle: "moto", aiVehicle: "mix" });
   ok(g.cars.every((c) => c.params && Number.isFinite(c.params.width)), "每台車都有參數包");
   for (let i = 0; i < 60 * 6; i++) g.update(DT);
   ok(g.phase === "racing" && g.cars.every((c) => Number.isFinite(c.x) && Number.isFinite(c.speed)), "混搭跑起來、數值有限");

@@ -154,7 +154,24 @@ ok(await page.isVisible("#homeScreen.visible") && await page.evaluate(() => !win
 await page.selectOption("#aiSelect", "3");
 
 // ── v4(0907):載具 賽車/摩托車/馬 ──
-ok(await page.evaluate(() => document.querySelectorAll("#vehicleSelect option").length === 3), "載具選單 3 型");
+ok(await page.evaluate(() => document.querySelectorAll("#vehicleSelect option").length === 4), "載具選單 4 型(含懸浮車)");
+ok(await page.evaluate(() => document.querySelectorAll("#aiVehicleSelect option").length === 5), "對手載具選單 5 檔(混搭 + 四型)");
+// 0907 使用者:「對手要能選擇馬或摩托車或懸浮車」——指定後開一場,確認四台對手真的全是那一型
+await page.selectOption("#aiVehicleSelect", "hover");
+await page.selectOption("#aiSelect", "3");
+await page.click("#startButton");
+await page.waitForTimeout(400);
+if (await page.isVisible("#helpOverlay.visible")) await page.click("#helpCloseButton");
+const aiPick = await page.evaluate(() => { const g = window.__racing3d; return { kinds: [...new Set(g.cars.filter((c) => !c.isPlayer).map((c) => c.vehicle))], rigs: [...new Set(g.cars.filter((c) => !c.isPlayer).map((c) => g.rigs.get(c).kind))], me: g.player.vehicle }; });
+ok(aiPick.kinds.length === 1 && aiPick.kinds[0] === "hover" && aiPick.rigs[0] === "hover", `指定懸浮車 ⇒ 對手全是懸浮車(${aiPick.kinds.join("/")})`);
+await page.evaluate(() => { window.__racing3d.autopilot = true; });
+await page.waitForTimeout(4200);
+await page.screenshot({ path: OUT + "28-ai-hover.png" });
+ok(await page.evaluate(() => window.__racing3d.cars.every((c) => Number.isFinite(c.x) && Number.isFinite(c.speed))), "懸浮車對手跑起來、數值有限");
+await page.click("#menuButton");
+await page.waitForTimeout(400);
+await page.selectOption("#aiVehicleSelect", "mix");
+await page.waitForTimeout(200);
 await page.selectOption("#vehicleSelect", "horse");
 await page.waitForTimeout(400);
 const menuRig = await page.evaluate(() => { const g = window.__racing3d; return { kind: g.rigs.get(g.player).kind, veh: g.player.vehicle, hint: document.getElementById("vehicleHint").textContent }; });

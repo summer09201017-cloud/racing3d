@@ -39,16 +39,26 @@ export const DIFFICULTY = {
   hard:   { id: "hard",   label: "職業", maxSpeed: 50, accel: 18,   grip: 6,   assist: 0,    aiMax: 48,   aiLatAcc: 13,  aiSkill: 0.97, aiBoost: 0.7 },
 };
 
-/* 「AI 輕扶回中」開關(0906 使用者拍板:所有難度都可以開,職業也可能想要):
-   auto=照難度預設(幼兒/兒童/入門有、標準/職業無);on=一定有(至少 ASSIST_ON_MIN,輕輕的);off=完全自己開。 */
+/* 「AI 扶回中」強度(0907 使用者實玩拍板:「希望可以調整是輕輕扶還是重重扶或中等扶」+「所有難度都可以」):
+   auto=照難度預設(幼兒/兒童/入門有、標準/職業無);light/medium/strong=不管哪一檔難度都給那個強度;off=完全自己開。
+   ★ 強度是乘在 PD 輸出上的係數,不是改 kP/kD —— 手感一致,只是「扶多用力」。 */
 /* 輔助的 PD 參數(量值可調):dead=半寬的幾成內完全不介入、kP 拉回力、kD 煞住衝過頭。 */
 export const ASSIST = { dead: 0.45, kP: 2.2, kD: 0.9 };
-export const ASSIST_MODES = ["auto", "on", "off"];
-export const ASSIST_LABELS = { auto: "自動(幼兒/兒童/入門才開)", on: "開:AI 輕輕扶回路中間", off: "關:完全自己開" };
-export const ASSIST_ON_MIN = 0.35;
+export const ASSIST_MODES = ["auto", "light", "medium", "strong", "off"];
+export const ASSIST_LABELS = {
+  auto: "自動(照難度:幼兒/兒童/入門才扶)",
+  light: "輕輕扶(只在快貼到路邊時碰一下)",
+  medium: "中等扶(明顯把車帶回路中間)",
+  strong: "重重扶(幾乎自己走中線,新手最安心)",
+  off: "關:完全自己開",
+};
+/* 三檔的強度(量值可調)。任何難度都能選任何一檔——職業檔也能開重重扶,幼兒檔也能關掉。 */
+export const ASSIST_LEVELS = { light: 0.35, medium: 0.7, strong: 1.15 };
+export const ASSIST_ON_MIN = ASSIST_LEVELS.light;   // 相容舊名
 export function assistStrength(cfg, mode = "auto") {
   if (mode === "off") return 0;
-  if (mode === "on") return Math.max(cfg.assist || 0, ASSIST_ON_MIN);
+  if (ASSIST_LEVELS[mode] != null) return ASSIST_LEVELS[mode];
+  if (mode === "on") return Math.max(cfg.assist || 0, ASSIST_LEVELS.light);   // 舊存檔:on ⇒ 至少輕輕扶
   return cfg.assist || 0;
 }
 

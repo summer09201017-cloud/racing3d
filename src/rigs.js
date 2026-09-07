@@ -95,6 +95,63 @@ export function makeMotoRig(hex, { interior = false } = {}, wheelRadius = 0.34) 
   return { group, tilt, wheels, hide, flame, cockpit, tailMat, paint, kind: "moto", leanIn: true, anim: null };
 }
 
+/* ═══════════════════════ 🛸 懸浮車 ═══════════════════════ */
+export function makeHoverRig(hex, { interior = false } = {}) {
+  const group = new THREE.Group(), tilt = new THREE.Group(); group.add(tilt);
+  const paint = lambert(hex), dark = lambert(0x1b1f2a), glow = new THREE.MeshBasicMaterial({ color: 0x59d7ff, transparent: true, opacity: 0.55 });
+  const glass = new THREE.MeshLambertMaterial({ color: 0x21395c, transparent: true, opacity: 0.62 });
+  const skin = lambert(0xf1c9a5, { emissive: 0x8a7355, emissiveIntensity: 0.45 });
+  const hide = [];
+  // 船身:前尖後寬的梭形(用兩段箱體 + 斜面),沒有輪子
+  put(box(1.9, 0.34, 3.0, paint), 0, 0.86, 0, tilt);
+  put(box(1.5, 0.26, 1.1, paint), 0, 1.06, 0.55, tilt);
+  const nose = put(box(1.2, 0.22, 0.9, paint), 0, 0.84, 1.72, tilt); nose.rotation.x = 0.12;
+  put(box(2.0, 0.16, 0.5, dark), 0, 0.72, -1.42, tilt);
+  // 底部光暈(懸浮感):四片朝下的發光面 + 中央長條
+  for (const [sx, sz] of [[-1, 1], [1, 1], [-1, -1], [1, -1]]) {
+    const pad = new THREE.Mesh(new THREE.CircleGeometry(0.42, 16), glow);
+    pad.rotation.x = -Math.PI / 2; pad.position.set(sx * 0.72, 0.5, sz * 1.05); tilt.add(pad);
+  }
+  const underGlow = new THREE.Mesh(new THREE.PlaneGeometry(1.7, 2.6), new THREE.MeshBasicMaterial({ color: 0x59d7ff, transparent: true, opacity: 0.22 }));
+  underGlow.rotation.x = -Math.PI / 2; underGlow.position.y = 0.46; tilt.add(underGlow);
+  // 尾部推進器(boosting 時亮 = flame 契約)
+  for (const sx of [-1, 1]) {
+    const ring = put(new THREE.Mesh(new THREE.TorusGeometry(0.24, 0.06, 8, 14), dark), sx * 0.6, 0.9, -1.52, tilt);
+  }
+  const flame = put(new THREE.Mesh(new THREE.ConeGeometry(0.3, 1.1, 10), new THREE.MeshBasicMaterial({ color: 0x59d7ff, transparent: true, opacity: 0.75 })), 0, 0.9, -2.0, tilt);
+  flame.rotation.x = -Math.PI / 2; flame.visible = false;
+  const tailMat = new THREE.MeshLambertMaterial({ color: 0xff3b30, emissive: 0xff2a2a, emissiveIntensity: 0.35 });
+  for (const sx of [-1, 1]) put(box(0.3, 0.1, 0.05, tailMat), sx * 0.55, 1.02, -1.5, tilt);
+  // 艙罩 + 駕駛(駕駛座視角要藏)
+  const canopy = put(new THREE.Mesh(new THREE.SphereGeometry(0.62, 14, 10, 0, Math.PI * 2, 0, Math.PI / 2), glass), 0, 1.12, 0.15, tilt);
+  canopy.scale.set(1.05, 0.92, 1.35); hide.push(canopy);
+  const rim = put(new THREE.Mesh(new THREE.TorusGeometry(0.64, 0.035, 8, 20), dark), 0, 1.12, 0.15, tilt);
+  rim.rotation.x = Math.PI / 2; rim.scale.set(1.05, 1.35, 1); hide.push(rim);
+  const driver = new THREE.Group(); driver.position.set(0, 1.06, -0.05); tilt.add(driver); hide.push(driver);
+  put(box(0.36, 0.32, 0.24, paint), 0, 0.02, 0, driver);
+  const head = makeRiderHead(paint, skin); head.position.set(0, 0.2, 0); driver.add(head);
+  // 影子
+  const shadow = new THREE.Mesh(new THREE.CircleGeometry(1, 18), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.26, depthWrite: false }));
+  shadow.rotation.x = -Math.PI / 2; shadow.scale.set(1.0, 1.7, 1); shadow.position.y = 0.02; group.add(shadow);
+  // 駕駛座:艙內平視顯示器(速度表)+ 操縱桿隨轉向左右擺
+  let cockpit = null;
+  if (interior) {
+    cockpit = new THREE.Group(); tilt.add(cockpit);
+    put(box(1.15, 0.16, 0.42, dark), 0, 0.98, 0.78, cockpit);
+    const g = makeGauge(0.085); g.group.position.set(0.34, 1.09, 0.72); g.group.rotation.x = -0.25; cockpit.add(g.group);
+    const stick = new THREE.Group(); stick.position.set(0, 0.92, 0.42); cockpit.add(stick);
+    put(new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.034, 0.3, 8), dark), 0, 0.15, 0, stick);
+    put(box(0.26, 0.05, 0.08, lambert(0x4a505c)), 0, 0.3, 0, stick);
+    cockpit.userData = { wheel: stick, wheelAxis: "z", wheelGain: -0.55, needlePivot: g.needlePivot };
+  }
+  // 懸浮:船身持續上下微浮 + 側傾跟轉向(anim 契約)
+  const anim = (car) => {
+    const t = car.wheelSpin * 0.35 + (car.trackDist || 0) * 0.02;
+    tilt.position.y = Math.sin(t * 2.1) * 0.05 + 0.04;
+    underGlow.material.opacity = 0.16 + Math.min(0.18, Math.abs(car.speed) / 220);
+  };
+  return { group, tilt, wheels: [], hide, flame, cockpit, tailMat, paint, kind: "hover", leanIn: false, anim };
+}
 /* ═══════════════════════ 🐎 馬 ═══════════════════════ */
 export function makeHorseRig(hex, { interior = false } = {}) {
   const group = new THREE.Group(), tilt = new THREE.Group(); group.add(tilt);

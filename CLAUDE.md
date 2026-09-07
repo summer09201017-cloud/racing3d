@@ -40,6 +40,14 @@ Three.js 街機賽車:自由移動的車體 + 閉環樣條賽道(3 基底 × 4 �
 - 雙人:`car.playerIdx` = 視窗索引 = `cams` 索引 = P1/P2。單閘門 `is2P()`,別另開旗標。
 - 賽道 id:基底 `meadow`;變體 `meadow-rev` / `meadow-mir` / `meadow-mirrev`(`trackIdOf(base, variant)`)。正走 label 不加後綴,變體加「・逆走」等;`TRACKS[id].base / .variant` 給選單還原。變體是不同賽道 ⇒ 紀錄分開。
 
+## v7 使用者實玩三件 + 載具第四型(0907,第一次真人回饋)
+
+- **路加寬**(「很容易撞到欄杆與開到路邊」):`halfW` 草原 7→9.5、沙漠 8→10.5、雪山 6.5→9,`shoulder` 同步。★ `track.test` 那條「最小轉彎半徑 > 牆距」加寬後仍成立(已驗);起跑格橫向、AI 車道、道具橫向都是**半寬的比例**,自動跟著變寬,不用改。
+- **AI 扶回中四檔**(「希望可以調整是輕輕扶還是重重扶或中等扶」+「所有難度都可以」):`ASSIST_MODES = [auto, light, medium, strong, off]`,`ASSIST_LEVELS = {light .35, medium .7, strong 1.15}`。強度是**乘在 PD 輸出上的係數**,不改 kP/kD ⇒ 手感一致,只是「扶多用力」。舊存檔的 `on` 在 `startRace` 平移成 `light`。
+- **駕駛座視野**(「車子有點太多了,有點擋住視線」):儀表板壓低變薄、方向盤縮小、儀表縮小下移、頂梁上收變薄、後視鏡縮小、A 柱變細,眼位 1.27→1.38。★ **眼位往上不往前** —— 前移會讓後視鏡與頂梁在視野裡變大(地雷 4 的反面)。
+- **懸浮車**(第四型):草地完全不減速、轉向 ×1.18,難控感來自 `slipGain ×1.45`(甩的量),**不是靠抓地低**;掃 9 組後定 grip .92 / accel 1.02 ⇒ 四型完賽差 8.7%→**3.5%**。`wheels` 空陣列、`anim` 做上下微浮 + 底光隨速度。
+- **對手載具可指定**:`settings.aiVehicle`(mix + 四型),`aiVehicleFor(i, off, mode)`;mix 維持每場隨機起點輪流拿。
+
 ## v6 選單版面(0907,使用者在 3D 撞球回報「版本與簡歷收不起來,選單上面被遮住」)
 
 - **`must-haves-exempt.json`**(0907,`game-must-haves` 0942a7b 起支援):賽車對 ①關卡地圖 ②年齡三檔 ⑥出廠檢驗 三條寫了豁免理由,驗收器印 ⚪ 並附理由、不計紅燈(理由少於 10 字會被退回紅燈)。**豁免不是綠燈**,是「換一種方式做到了」——對應物分別是 12 條賽道選單、難度五檔 + 輔助三態、3037 項測試 + 104 項瀏覽器驗收 + 載具零和平衡。改動這三件事時記得同步改理由。
@@ -129,7 +137,7 @@ npm test && npm run build && npx wrangler deploy --name hfpc-racing3d --assets d
   ⚠ **為什麼是 Workers 不是 Pages**:CF 帳號被擋的**只有「建新 Pages 專案」**(code 8000030;四個不相關名字全被拒 ⇒ **帳號層級**,不是某個名字被封),**建新 Worker 名沒被擋**(0907 三次獨立實測 + 憫安站真的上線)⇒ 走 Workers assets,不必等申訴。想要 `pages.dev` 網址才要等桌面 `Cloudflare申訴信-2026-09-03.txt` 寄出並通過。
   ★ **為什麼趁 0907 搬**:換 origin 會讓玩家的**本機最佳紀錄(localStorage)歸零**——0907 統計是 2 開 1 完、全是驗收場,**還沒有孩子玩過**,所以這個代價當下等於零;一旦主日學用過就再也回不到這個價格。
   ★ **舊 Netlify 站的 301 殼**(源碼不在版控,三個檔,要重建時照抄):`_redirects` = `/*  https://hfpc-racing3d.summer09201017.workers.dev/:splat  301!`、`netlify.toml` = `[build] ignore = "exit 0"`、一頁 `index.html`(meta refresh + canonical + 一行「請把書籤改成新網址」)。部署:`npx netlify deploy --prod --dir . --site 4d240b0c-e780-4962-bf85-30779e678b64 --no-build`。
-- **更新流程(★ git push 不會上線,一定要重跑 deploy)**:見本段開頭的 wrangler 指令。殼層(index.html / sw.js / manifest / voice)有改就 bump sw `CACHE`(目前 `racing3d-v6`)。
+- **更新流程(★ git push 不會上線,一定要重跑 deploy)**:見本段開頭的 wrangler 指令。殼層(index.html / sw.js / manifest / voice)有改就 bump sw `CACHE`(目前 `racing3d-v7`)。
   ⚠ `--assets dist` 只上傳 build 產物 27 檔(源碼/設定/測試/文件都不在裡面,0907 逐條 curl 驗過全 404)⇒ **不需要 `.assetsignore`**(那只有 `--assets .` 才要)。
 - psPing id `racing3d`(index.html)、`racing3d-done` / `racing3d-dwell`(main.js)——beacon 只排除 localhost、不認 hostname,**換平台不用改、統計不斷線**;verTag 在 `index.html #verTag`。
 - **帳本(0907 搬站後現況)**:實際帶網址的只有**三處**,0907 都已改成 workers.dev 並線上驗過:①奧運頁卡 `Desktop/hfpc-olympics/index.html`(改完要 `wrangler deploy --name hfpc-olympics --assets .`)②作品集 `hfpc-portfolio/data.js`(同樣 wrangler)③`hfpc-claude-skills` 的 `references/machine-env-0714/gamefleet/sites.json`。

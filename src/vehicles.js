@@ -8,7 +8,7 @@ export const VEHICLES = {
     id: "car", label: "賽車", emoji: "🏎️", rig: "car", sound: "engine", boostLabel: "渦輪", leanIn: false,
     blurb: "均衡:什麼都中等,最好上手。",
     over: {},
-    eye: { x: 0.4, y: 1.27, z: -0.1 }, hood: { x: 0, y: 0.92, z: 1.6 },
+    eye: { x: 0.4, y: 1.38, z: -0.1 }, hood: { x: 0, y: 0.92, z: 1.6 },   // 0907 使用者實玩「擋住視線」⇒ 眼位 1.27→1.38(往上,不往前;前移會讓後視鏡與頂梁變大,見 CLAUDE.md 地雷 4)
   },
   moto: {
     id: "moto", label: "摩托車", emoji: "🏍️", rig: "moto", sound: "moto", boostLabel: "渦輪", leanIn: true,
@@ -24,8 +24,20 @@ export const VEHICLES = {
     over: { turnRate: CAR.turnRate * 1.1, gripMul: 1.08, accelMul: 0.88, width: 1.2, length: 2.9, grassSpeedMul: 1.0, grassDrag: 0, turboBurn: CAR.turboBurn * 1.35, turboRegen: CAR.turboRegen * 0.85, wallBounce: 0.6, wheelRadius: 1.0 },
     eye: { x: 0, y: 2.98, z: -0.1 }, hood: { x: 0, y: 2.05, z: 1.55 },   // 眼位比騎士頭再高 25cm(0907 截圖:2.74 時馬頭正好擋在畫面中央)
   },
+  hover: {
+    id: "hover", label: "懸浮車", emoji: "🛸", rig: "hover", sound: "hover", boostLabel: "推進器", leanIn: false,
+    blurb: "浮在地面上:草地完全不減速(想切哪就切哪)、轉向靈活;但很會漂,要提早修方向。",
+    // 0907 掃 9 組:grip 0.92 / accel 1.02 ⇒ 草原 46.2s,四型差 8.7%→**3.5%**。
+    // ★ 難控感由 slipGain ×1.45(甩得多)負責,不是靠抓地低——抓地太低只會讓它單純變慢、失去「浮起來滑順」的味道。
+    over: { turnRate: CAR.turnRate * 1.18, gripMul: 0.92, accelMul: 1.02, width: 1.8, length: 3.4, grassSpeedMul: 1.0, grassDrag: 0, slipGain: CAR.slipGain * 1.45, wallBounce: 0.66, wheelRadius: 0.001 },
+    eye: { x: 0, y: 1.34, z: 0.05 }, hood: { x: 0, y: 1.0, z: 1.5 },
+  },
 };
 export const VEHICLE_IDS = Object.keys(VEHICLES);
+
+/* 對手載具(0907 使用者:「對手要能選擇馬或摩托車或懸浮車」):mix=每場隨機混搭(原行為),其餘=全部同一種。 */
+export const AI_VEHICLE_MODES = ["mix", ...VEHICLE_IDS];
+export const AI_VEHICLE_LABELS = { mix: "🎲 混搭(每場都不一樣)", ...Object.fromEntries(VEHICLE_IDS.map((id) => [id, `全部 ${VEHICLES[id].emoji} ${VEHICLES[id].label}`])) };
 
 /** 給 stepCar 用的完整參數包:基底 CAR + 該載具覆寫;accelMul/gripMul 乘在難度的 accel/grip 上。沒給/亂值=賽車。 */
 export function vehicleParams(id) {
@@ -33,7 +45,8 @@ export function vehicleParams(id) {
   return { ...CAR, accelMul: 1, gripMul: 1, ...v.over };
 }
 
-/** AI 混搭:第 i 台從隨機起點輪流拿(≥2 台一定不同種),offset 由呼叫端用該場種子算。 */
-export function aiVehicleFor(i, offset) {
+/** 第 i 台對手開什麼:mode="mix" 用隨機起點輪流拿(≥2 台一定不同種);指定某一型就全部同一型。 */
+export function aiVehicleFor(i, offset, mode = "mix") {
+  if (VEHICLES[mode]) return mode;
   return VEHICLE_IDS[(i + offset) % VEHICLE_IDS.length];
 }

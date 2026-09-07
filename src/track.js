@@ -16,7 +16,7 @@ export const BASE_TRACKS = {
       [0, -150], [120, -170], [230, -110], [260, 10], [200, 110],
       [90, 150], [-40, 120], [-90, 30], [-180, -20], [-230, -120], [-130, -190],
     ],
-    halfW: 7, shoulder: 5,
+    halfW: 9.5, shoulder: 6.5,   // 0907 使用者實玩「很容易撞到欄杆與開到路邊」⇒ 7→9.5、路肩 5→6.5
     heightKeys: [[0, 0], [0.18, 6], [0.32, 6], [0.45, 0], [0.62, 3], [0.78, 0], [1, 0]],
     palette: { road: 0x4a4e57, line: 0xf2f2f2, grass: 0x4f9d4a, shoulder: 0x7bb662, sky: 0x8ec9ff, fog: 0xbfe1ff },
     scenery: "trees",
@@ -27,7 +27,7 @@ export const BASE_TRACKS = {
       [0, -220], [260, -230], [330, -80], [300, 120], [160, 200],
       [-40, 180], [-120, 60], [-260, 40], [-320, -100], [-200, -220],
     ],
-    halfW: 8, shoulder: 6,
+    halfW: 10.5, shoulder: 7.5,  // 同上:8→10.5、路肩 6→7.5
     heightKeys: [[0, 0], [0.25, 4], [0.4, 9], [0.55, 4], [0.7, 8], [0.85, 2], [1, 0]],
     palette: { road: 0x5a5148, line: 0xffe9a8, grass: 0xd9b56e, shoulder: 0xc9a25a, sky: 0xffd9a0, fog: 0xf5d7a8 },
     scenery: "cactus",
@@ -38,7 +38,7 @@ export const BASE_TRACKS = {
       [0, -120], [90, -160], [150, -80], [110, 0], [170, 80], [100, 150],
       [0, 120], [-60, 170], [-150, 120], [-120, 20], [-170, -60], [-90, -130],
     ],
-    halfW: 6.5, shoulder: 4,
+    halfW: 9, shoulder: 5.5,     // 同上:6.5→9、路肩 4→5.5(雪山原本最窄,加最多)
     heightKeys: [[0, 0], [0.2, 10], [0.35, 18], [0.5, 12], [0.65, 22], [0.82, 8], [1, 0]],
     palette: { road: 0x3f4753, line: 0xffffff, grass: 0xe9f1f7, shoulder: 0xd6e2ec, sky: 0xb9d4ec, fog: 0xdbe8f2 },
     scenery: "pines",

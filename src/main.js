@@ -4,7 +4,7 @@ import "./styles.css";
 // 鍵位(雙人同機,duel-2p-kit):P1 左手 W/S/A/D + 左Shift 渦輪 + Space 手煞 + V 視角(1~5)+ R 回賽道;
 //                              P2 右手 ↑/↓/←/→ + 右Shift 渦輪 + Enter 手煞 + 0 視角 + Backspace 回賽道。
 //   ★ 單人時 P2 鍵全部別名回 P1(方向鍵照常能玩、沒有死鍵);切雙人同一段程式自動變 P2 專屬。觸控/手把只給 P1。
-import { RacingGame, CAM_VIEWS, CAM_LABELS, CAR_COLORS, LAP_OPTIONS, AI_OPTIONS, TRACKS, BASE_TRACKS, BASE_TRACK_IDS, TRACK_VARIANTS, VARIANT_LABELS, trackIdOf, DIFFICULTY, MODES, ASSIST_MODES, ASSIST_LABELS, GRID_OPTIONS, GRID_LABELS, VEHICLES, VEHICLE_IDS, fmtTime } from "./game.js";
+import { RacingGame, CAM_VIEWS, CAM_LABELS, CAR_COLORS, LAP_OPTIONS, AI_OPTIONS, TRACKS, BASE_TRACKS, BASE_TRACK_IDS, TRACK_VARIANTS, VARIANT_LABELS, trackIdOf, DIFFICULTY, MODES, ASSIST_MODES, ASSIST_LABELS, GRID_OPTIONS, GRID_LABELS, VEHICLES, VEHICLE_IDS, AI_VEHICLE_MODES, AI_VEHICLE_LABELS, fmtTime } from "./game.js";
 import { AudioManager } from "./audio.js";
 import { GamepadInput } from "./gamepad.js";
 import { loadSettings, saveSettings } from "./storage.js";
@@ -34,7 +34,7 @@ const ui = {
   homeScreen: $("homeScreen"), modeSelect: $("modeSelect"), trackSelect: $("trackSelect"), variantSelect: $("variantSelect"), lapsSelect: $("lapsSelect"), aiSelect: $("aiSelect"),
   difficultySelect: $("difficultySelect"), assistSelect: $("assistSelect"), gridSelect: $("gridSelect"), colorSelect: $("colorSelect"), audioSelect: $("audioSelect"),
   colorLabel: $("colorLabel"), startButton: $("startButton"),
-  vehicleSelect: $("vehicleSelect"), vehicle2Select: $("vehicle2Select"), vehicle2Label: $("vehicle2Label"), vehicleHint: $("vehicleHint"), turboLabel: $("turboLabel"), turboLabel2: $("turboLabel2"),
+  vehicleSelect: $("vehicleSelect"), aiVehicleSelect: $("aiVehicleSelect"), vehicle2Select: $("vehicle2Select"), vehicle2Label: $("vehicle2Label"), vehicleHint: $("vehicleHint"), turboLabel: $("turboLabel"), turboLabel2: $("turboLabel2"),
   itemsSelect: $("itemsSelect"), starText: $("starText"), starText2: $("starText2"), dailyButton: $("dailyButton"), dailyHint: $("dailyHint"), dailyBadge: $("dailyBadge"),
   pauseButton: $("pauseButton"), pauseOverlay: $("pauseOverlay"), pauseResumeButton: $("pauseResumeButton"), pauseMenuButton: $("pauseMenuButton"),
   recordText: $("recordText"), homeRecord: $("homeRecord"), recText: $("recText"), recText2: $("recText2"),
@@ -54,6 +54,7 @@ const settings = {
   vehicle: VEHICLES[saved.vehicle] ? saved.vehicle : "car",
   vehicle2: VEHICLES[saved.vehicle2] ? saved.vehicle2 : "car",
   items: saved.items !== false,
+  aiVehicle: AI_VEHICLE_MODES.includes(saved.aiVehicle) ? saved.aiVehicle : "mix",
 };
 let audioEnabled = saved.audioEnabled !== false;
 let helpSeen = saved.helpSeen === true;
@@ -81,6 +82,7 @@ fill(ui.colorSelect, CAR_COLORS.map((c, i) => ({ value: i, label: c.label })), s
 const vehicleItems = VEHICLE_IDS.map((id) => ({ value: id, label: `${VEHICLES[id].emoji} ${VEHICLES[id].label}` }));
 fill(ui.vehicleSelect, vehicleItems, settings.vehicle);
 fill(ui.vehicle2Select, vehicleItems, settings.vehicle2);
+fill(ui.aiVehicleSelect, AI_VEHICLE_MODES.map((m) => ({ value: m, label: AI_VEHICLE_LABELS[m] })), settings.aiVehicle);
 ui.audioSelect.value = audioEnabled ? "on" : "off";
 ui.itemsSelect.value = settings.items ? "on" : "off";
 
@@ -95,6 +97,7 @@ window.__racing3dAudio = audio;
 game.settings.colorIdx = settings.colorIdx;
 game.settings.vehicle = settings.vehicle; game.settings.vehicle2 = settings.vehicle2;
 game.settings.items = settings.items;
+game.settings.aiVehicle = settings.aiVehicle;
 game.setTrack(settings.trackId);
 game.setPlayerColor(settings.colorIdx);
 
@@ -134,10 +137,12 @@ function updateVehicleHint() {
   const v = VEHICLES[settings.vehicle] || VEHICLES.car;
   const two = settings.mode === "duel2p";
   const v2 = VEHICLES[settings.vehicle2] || VEHICLES.car;
-  ui.vehicleHint.textContent = `${v.emoji} ${v.label}:${v.blurb}${two ? `　P2 ${v2.emoji} ${v2.label}:${v2.blurb}` : ""}　電腦車三種混搭。極速由難度決定,載具只換手感。`;
+  const ai = settings.aiVehicle === "mix" ? "電腦車四種混搭" : `電腦車全部開 ${(VEHICLES[settings.aiVehicle] || VEHICLES.car).emoji} ${(VEHICLES[settings.aiVehicle] || VEHICLES.car).label}`;
+  ui.vehicleHint.textContent = `${v.emoji} ${v.label}:${v.blurb}${two ? `　P2 ${v2.emoji} ${v2.label}:${v2.blurb}` : ""}　${ai}。極速由難度決定,載具只換手感。`;
 }
 ui.vehicleSelect.addEventListener("change", () => { settings.vehicle = game.setVehicle(ui.vehicleSelect.value, 0); saveSettings({ vehicle: settings.vehicle }); game.setPlayerColor(settings.colorIdx); updateVehicleHint(); audio.uiTap(); });
 ui.vehicle2Select.addEventListener("change", () => { settings.vehicle2 = game.setVehicle(ui.vehicle2Select.value, 1); saveSettings({ vehicle2: settings.vehicle2 }); updateVehicleHint(); });
+ui.aiVehicleSelect.addEventListener("change", () => { settings.aiVehicle = ui.aiVehicleSelect.value; saveSettings({ aiVehicle: settings.aiVehicle }); game.settings.aiVehicle = settings.aiVehicle; updateVehicleHint(); audio.uiTap(); });
 ui.modeSelect.addEventListener("change", updateVehicleHint);
 ui.itemsSelect.addEventListener("change", () => {
   settings.items = ui.itemsSelect.value === "on";

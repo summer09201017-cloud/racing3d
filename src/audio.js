@@ -111,6 +111,16 @@ export class AudioManager {
       if (this.skid) this.skid.gain.gain.setTargetAtTime(this.enabled && active ? clamp(slip, 0, 1) * 0.06 : 0.0001, now, 0.06);
       return;
     }
+    if (kind === "hover") {
+      // 懸浮車:低頻嗡鳴 + 高泛音,沒有引擎的鋸齒感;速度只改音高與亮度
+      const base = 62 + rpm * 120 + (boosting ? 30 : 0);
+      e.osc1.frequency.setTargetAtTime(base, now, 0.08);
+      e.osc2.frequency.setTargetAtTime(base * 2.02, now, 0.08);   // 略失諧的八度 ⇒ 電子嗡鳴
+      e.filter.frequency.setTargetAtTime(240 + rpm * 900 + throttle * 260, now, 0.1);
+      e.gain.gain.setTargetAtTime(this.enabled ? (active ? 0.045 + rpm * 0.05 : 0.028) : 0.0001, now, 0.1);
+      if (this.skid) this.skid.gain.gain.setTargetAtTime(this.enabled && active ? clamp(slip, 0, 1) * 0.05 : 0.0001, now, 0.06);
+      return;
+    }
     const moto = kind === "moto";
     const base = (moto ? 95 : 55) + rpm * (moto ? 320 : 190) + (boosting ? 40 : 0);
     e.osc1.frequency.setTargetAtTime(base, now, 0.05);

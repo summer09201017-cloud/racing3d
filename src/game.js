@@ -7,12 +7,12 @@ import * as THREE from "three";
 import { TRACKS, TRACK_IDS, BASE_TRACKS, BASE_TRACK_IDS, TRACK_VARIANTS, VARIANT_LABELS, trackIdOf, buildTrack, posAt, pointAtOffset, rightOfTangent, tvCameraSpots, nearest } from "./track.js";
 import { CAR, DIFFICULTY, ASSIST_MODES, ASSIST_LABELS, assistStrength, createCar, placeOnTrack, stepCar, emptyInput, rescue, forwardOf, rpm01, kmh, clamp, resolveCollisions } from "./vehicle.js";
 import { makeAiBrain, aiInput } from "./ai.js";
-import { VEHICLES, VEHICLE_IDS, vehicleParams, aiVehicleFor } from "./vehicles.js";
-import { makeMotoRig, makeHorseRig } from "./rigs.js";
+import { VEHICLES, VEHICLE_IDS, AI_VEHICLE_MODES, AI_VEHICLE_LABELS, vehicleParams, aiVehicleFor } from "./vehicles.js";
+import { makeMotoRig, makeHorseRig, makeHoverRig } from "./rigs.js";
 import { ITEM_TYPES, buildItems, stepItems, respawnForCar } from "./items.js";
 import { dailyChallenge, dailyKey } from "./daily.js";
 
-export { TRACKS, TRACK_IDS, BASE_TRACKS, BASE_TRACK_IDS, TRACK_VARIANTS, VARIANT_LABELS, trackIdOf, DIFFICULTY, ASSIST_MODES, ASSIST_LABELS, VEHICLES, VEHICLE_IDS, ITEM_TYPES, dailyChallenge, dailyKey };
+export { TRACKS, TRACK_IDS, BASE_TRACKS, BASE_TRACK_IDS, TRACK_VARIANTS, VARIANT_LABELS, trackIdOf, DIFFICULTY, ASSIST_MODES, ASSIST_LABELS, VEHICLES, VEHICLE_IDS, AI_VEHICLE_MODES, AI_VEHICLE_LABELS, ITEM_TYPES, dailyChallenge, dailyKey };
 
 /* 模式(duel-2p-kit 單閘門:所有分歧只問 is2P()):solo=單人;duel2p=雙人同機分割畫面(左 P1 藍、右 P2 紅,鐵則色)。 */
 export const MODES = { solo: { id: "solo", label: "單人" }, duel2p: { id: "duel2p", label: "雙人同機(分割畫面)" } };
@@ -39,7 +39,7 @@ export const CAR_COLORS = [
 export const LAP_OPTIONS = [1, 2, 3, 5];
 export const AI_OPTIONS = [0, 1, 2, 3, 5];
 export const AI_NAMES = ["阿福", "小美", "大衛", "以諾", "米迦", "撒拉", "約書亞"];
-export const DEFAULT_SETTINGS = { trackId: "meadow", laps: 3, aiCount: 3, difficulty: "easy", colorIdx: 0, mode: "solo", assist: "auto", gridPos: "last", vehicle: "car", vehicle2: "car", items: true };
+export const DEFAULT_SETTINGS = { trackId: "meadow", laps: 3, aiCount: 3, difficulty: "easy", colorIdx: 0, mode: "solo", assist: "auto", gridPos: "last", vehicle: "car", vehicle2: "car", aiVehicle: "mix", items: true };
 const COUNTDOWN_SECONDS = 3.6;
 /* 完美起跑(v3 規則,0907):GO 之後 window 秒內踩油門、而且油門「連續按住」還不到 hold 秒(倒數到「1」才踩算,從「3」就一直按不算)
    ⇒ 免費渦輪 boostSeconds 秒(燃料每幀退回,不碰 stepCar 物理)。太早按不罰、只提醒(溫柔規則)。
@@ -526,40 +526,41 @@ export class RacingGame {
     if (interior) {
       cockpit = new THREE.Group(); tilt.add(cockpit);
       const trim = lambert(0x2b2f38), trim2 = lambert(0x1c1f26);
-      add(new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.28, 0.55), trim), 0, 0.92, 0.72, cockpit);          // 儀表板
-      add(new THREE.Mesh(new THREE.BoxGeometry(1.52, 0.05, 0.62), trim2), 0, 1.06, 0.74, cockpit);        // 儀表台頂
+      // 0907 使用者實玩「車子有點太多了,有點擋住視線」⇒ 儀表板整組壓低、方向盤與儀表縮小、頂梁後視鏡上收、A 柱變細
+      add(new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.22, 0.55), trim), 0, 0.85, 0.72, cockpit);          // 儀表板(0.28→0.22 高、y 0.92→0.85)
+      add(new THREE.Mesh(new THREE.BoxGeometry(1.52, 0.05, 0.62), trim2), 0, 0.97, 0.74, cockpit);        // 儀表台頂(1.06→0.97)
       const col = add(new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.36, 8), trim2), 0.4, 0.98, 0.5, cockpit); col.rotation.x = 1.15;
       // 方向盤 pivot(向駕駛傾斜),wheel 子物件吃 rotation.z = steer(+右=順時鐘,見 _animateCar)
-      const wheelPivot = new THREE.Group(); wheelPivot.position.set(0.4, 1.0, 0.36); wheelPivot.rotation.x = -0.38; cockpit.add(wheelPivot);
+      const wheelPivot = new THREE.Group(); wheelPivot.position.set(0.4, 0.92, 0.36); wheelPivot.rotation.x = -0.38; cockpit.add(wheelPivot);   // y 1.0→0.92
       const wheel = new THREE.Group(); wheelPivot.add(wheel);
-      wheel.add(new THREE.Mesh(new THREE.TorusGeometry(0.19, 0.026, 10, 30), lambert(0x111318)));
+      wheel.add(new THREE.Mesh(new THREE.TorusGeometry(0.155, 0.022, 10, 30), lambert(0x111318)));   // 0.19→0.155(小一圈,不再佔畫面下半)
       const spokeMat = lambert(0x4a505c);
-      add(new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.035, 0.03), spokeMat), 0, 0, 0, wheel);
-      add(new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.18, 0.03), spokeMat), 0, -0.09, 0, wheel);
-      const hub = add(new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.055, 0.05, 12), lambert(0xd0d4dc)), 0, 0, 0, wheel); hub.rotation.x = Math.PI / 2;
+      add(new THREE.Mesh(new THREE.BoxGeometry(0.29, 0.03, 0.03), spokeMat), 0, 0, 0, wheel);
+      add(new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.15, 0.03), spokeMat), 0, -0.075, 0, wheel);
+      const hub = add(new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.05, 12), lambert(0xd0d4dc)), 0, 0, 0, wheel); hub.rotation.x = Math.PI / 2;
       // 儀表(不轉 group、材質雙面):+rotation.z 對駕駛是順時鐘,θ=0 指駕駛的左(+x)
-      const gauge = new THREE.Group(); gauge.position.set(0.4, 1.13, 0.66); cockpit.add(gauge);
-      gauge.add(new THREE.Mesh(new THREE.CircleGeometry(0.115, 28), new THREE.MeshBasicMaterial({ color: 0x0b0e15, side: THREE.DoubleSide })));
-      gauge.add(new THREE.Mesh(new THREE.TorusGeometry(0.115, 0.008, 6, 28), lambert(0xd0d4dc)));
+      const gauge = new THREE.Group(); gauge.position.set(0.4, 1.02, 0.66); cockpit.add(gauge);   // y 1.13→1.02、半徑 0.115→0.092:不再浮在前方視線上
+      gauge.add(new THREE.Mesh(new THREE.CircleGeometry(0.092, 28), new THREE.MeshBasicMaterial({ color: 0x0b0e15, side: THREE.DoubleSide })));
+      gauge.add(new THREE.Mesh(new THREE.TorusGeometry(0.092, 0.007, 6, 28), lambert(0xd0d4dc)));
       for (let i = 0; i <= 8; i++) {
         const th = (330 + i * 30) * Math.PI / 180;
         const tick = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.006, 0.004), new THREE.MeshBasicMaterial({ color: i >= 7 ? 0xff5040 : 0xdde3ee, side: THREE.DoubleSide }));
-        tick.position.set(Math.cos(th) * 0.095, Math.sin(th) * 0.095, -0.004); tick.rotation.z = th; gauge.add(tick);
+        tick.position.set(Math.cos(th) * 0.076, Math.sin(th) * 0.076, -0.004); tick.rotation.z = th; gauge.add(tick);
       }
       const needlePivot = new THREE.Group(); needlePivot.position.z = -0.006; gauge.add(needlePivot);
-      const needle = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.01, 0.004), new THREE.MeshBasicMaterial({ color: 0xff4a3d, side: THREE.DoubleSide }));
-      needle.position.x = 0.05; needlePivot.add(needle);
+      const needle = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.009, 0.004), new THREE.MeshBasicMaterial({ color: 0xff4a3d, side: THREE.DoubleSide }));
+      needle.position.x = 0.04; needlePivot.add(needle);
       needlePivot.rotation.z = 330 * Math.PI / 180;
       // A 柱、頂梁、後視鏡、門板、座椅
       for (const sx of [-1, 1]) {
-        const pillar = add(new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.6, 0.08), trim), sx * 0.74, 1.24, 0.8, cockpit); pillar.rotation.x = -0.32;
+        const pillar = add(new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.6, 0.055), trim), sx * 0.76, 1.24, 0.8, cockpit); pillar.rotation.x = -0.32;   // A 柱 0.08→0.055 並外移,少擋兩側
         add(new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.42, 1.5), trim), sx * 0.76, 0.95, -0.25, cockpit);
         add(new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.12, 0.5), trim2), sx * 0.4, 0.8, -0.35, cockpit);
         add(new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.55, 0.12), trim2), sx * 0.4, 1.1, -0.62, cockpit);
       }
-      add(new THREE.Mesh(new THREE.BoxGeometry(1.56, 0.07, 0.14), trim), 0, 1.48, 0.86, cockpit);        // 擋風玻璃頂梁(離眼 ~0.95m)
-      add(new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.07, 0.04), trim2), 0, 1.42, 0.8, cockpit);        // 後視鏡柱
-      add(new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.09, 0.03), lambert(0x9fb4d0)), 0, 1.37, 0.8, cockpit); // 後視鏡
+      add(new THREE.Mesh(new THREE.BoxGeometry(1.56, 0.055, 0.12), trim), 0, 1.60, 0.86, cockpit);       // 擋風玻璃頂梁(1.48→1.60、變薄:上緣讓出天空)
+      add(new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.06, 0.035), trim2), 0, 1.545, 0.8, cockpit);     // 後視鏡柱
+      add(new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.07, 0.03), lambert(0x9fb4d0)), 0, 1.50, 0.8, cockpit); // 後視鏡(0.3→0.22 寬、上移到頂梁下)
       cockpit.userData = { wheel, wheelAxis: "z", wheelGain: 1.7, needlePivot };
     }
     return { group, tilt, wheels, hide, flame, cockpit, tailMat, paint, kind: "car", leanIn: false, anim: null };
@@ -569,6 +570,7 @@ export class RacingGame {
   _makeRig(vehicle, hex, opts) {
     if (vehicle === "moto") return makeMotoRig(hex, opts, (VEHICLES.moto.over.wheelRadius || 0.34));
     if (vehicle === "horse") return makeHorseRig(hex, opts);
+    if (vehicle === "hover") return makeHoverRig(hex, opts);
     return this._makeCarRig(hex, opts);
   }
 
@@ -621,10 +623,12 @@ export class RacingGame {
     next.laps = Number(next.laps); next.aiCount = Number(next.aiCount);
     next.colorIdx = ((Number(next.colorIdx) || 0) % CAR_COLORS.length + CAR_COLORS.length) % CAR_COLORS.length;
     if (!MODES[next.mode]) next.mode = "solo";
+    if (next.assist === "on") next.assist = "light";   // 舊存檔(v2~v6 的三態)平移到新的四檔
     if (!ASSIST_MODES.includes(next.assist)) next.assist = "auto";
     if (!GRID_OPTIONS.includes(next.gridPos)) next.gridPos = "last";
     if (!VEHICLES[next.vehicle]) next.vehicle = "car";
     if (!VEHICLES[next.vehicle2]) next.vehicle2 = "car";
+    if (!AI_VEHICLE_MODES.includes(next.aiVehicle)) next.aiVehicle = "mix";
     next.items = next.items !== false;
     const itemsChanged = (next.items !== false) !== (this.settings.items !== false);
     const trackChanged = next.trackId !== this.settings.trackId || !this.scene;
@@ -647,7 +651,7 @@ export class RacingGame {
     const vOff = Math.floor(mulberry(1000 + this.raceNo * 7919)() * VEHICLE_IDS.length);   // v4 AI 混搭:每場隨機起點輪流拿(使用者拍板 Mario Kart 式)
     for (let i = 0; i < next.aiCount; i++) {
       const ci = others[i % others.length];
-      const ai = this._spawnCar({ name: AI_NAMES[i % AI_NAMES.length], colorIdx: ci, vehicle: aiVehicleFor(i, vOff) }, CAR_COLORS[ci].hex, false);
+      const ai = this._spawnCar({ name: AI_NAMES[i % AI_NAMES.length], colorIdx: ci, vehicle: aiVehicleFor(i, vOff, next.aiVehicle) }, CAR_COLORS[ci].hex, false);
       this.brains.set(ai, makeAiBrain(0.137 + i * 0.311 + ((this.raceNo - 1) % 97) * 0.0071, cfg));
       ais.push(ai);
     }
