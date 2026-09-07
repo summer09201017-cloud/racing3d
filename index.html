@@ -24,11 +24,13 @@
         <div class="race-line big"><span id="lapText">第 1 / 3 圈</span></div>
         <div class="race-line"><span id="rankText">第 1 名 / 4</span></div>
         <div class="race-line small"><span id="timeText">0:00.0</span>・單圈 <span id="lapTimeText">0:00.0</span>・最佳 <span id="bestText">--:--.-</span><span id="recText"></span></div>
+        <div class="race-line star-line"><span id="starText"></span><span class="daily-badge" id="dailyBadge" hidden>📅 今日挑戰</span></div>
       </div>
       <div class="race-card p2" id="raceCard2" hidden>
         <div class="race-line big"><span id="lapText2">P2・第 1 / 3 圈</span></div>
         <div class="race-line"><span id="rankText2">第 1 名 / 4</span></div>
         <div class="race-line small"><span id="timeText2">0:00.0</span>・單圈 <span id="lapTimeText2">0:00.0</span>・最佳 <span id="bestText2">--:--.-</span><span id="recText2"></span></div>
+        <div class="race-line star-line"><span id="starText2"></span></div>
       </div>
 
       <div class="mini-wrap" id="miniWrap" hidden>
@@ -106,6 +108,8 @@
             <div>📷 <b>視角</b>:<b>V</b> 或「視角」鈕循環五檔:<b>追尾跟隨 → 車頭 → 駕駛座(第一人稱,方向盤會跟著轉、儀表指針跟著速度)→ 高空俯瞰 → 轉播機位</b>。數字鍵 <b>1~5</b> 直接跳。選擇會記住(P2 用 0 循環)。</div>
             <div>🤖 <b>AI 輕扶回中</b>(選單「輔助」):快貼到路邊時 AI 會輕輕把車拉回路中間,你自己在打方向它就少介入。<b>任何難度都能開</b>,職業檔也可以;「自動」=幼兒/兒童/入門才開。</div>
             <div>🏁 <b>比賽</b>:倒數 3、2、1、GO!跑完設定的圈數就完賽,名次看誰先過終點線。地上<b>黃底黑箭頭</b>=前面有急彎,先煞車再轉。「起跑格」可以選排最後(從後面往前超車最好玩)或最前排。</div>
+            <div>🎁 <b>路上的道具</b>(選單「道具」可關):地上綠色箭頭板=<b>加速板</b>(壓過去送一段渦輪,不花你自己的);黑色油漬=<b>踩到會滑</b>(在彎道內側,貪內線的代價;只會滑不會翻);金色<b>星星</b>在彎道外側(繞遠一點去撿,撿到渦輪補滿)。<b>每跑完一圈全部重生</b>,而且各撿各的、不會被別人搶走。電腦車也會搶加速板、閃油漬。</div>
+            <div>📅 <b>今日挑戰</b>:首頁「📅 今日挑戰」鈕——每天一題,<b>全班同一題</b>(賽道、方向、圈數、難度、對手都由日期決定),比誰跑得快。今天的最好成績會單獨記一格。</div>
             <div>🏍️ <b>載具</b>(選單「載具」):🏎️ 賽車均衡;🏍️ 摩托車轉得快、車身窄好鑽、起步快,但抓地差會滑、草地更慢;🐎 馬在草地不減速(可以切內側)、抓地好,但起步慢、衝刺體力耗得快。電腦車三種混搭。<b>極速由難度決定,載具只換手感</b>。雙人時 P2 可以選自己的載具。</div>
             <div>⚡ <b>完美起跑</b>:倒數到「1」或「GO」的時候才踩油門,會送你一段免費渦輪!從「3」就一直按住不算(也不會罰)。電腦車也會,職業檔大約一半的車會用。</div>
             <div>⏸ <b>暫停</b>:比賽中按 <b>P</b>、<b>Esc</b> 或「⏸ 暫停」鈕,計時和所有車都停住;老師要講話、要換人都可以。切到別的分頁會自動暫停。</div>
@@ -174,6 +178,12 @@
             <label id="colorLabel">車色
               <select id="colorSelect"></select>
             </label>
+            <label>道具
+              <select id="itemsSelect">
+                <option value="on" selected>開(加速板・油漬・星星)</option>
+                <option value="off">關</option>
+              </select>
+            </label>
             <label>音效與播報
               <select id="audioSelect">
                 <option value="on" selected>開啟</option>
@@ -185,8 +195,10 @@
           <p class="home-hint">↑ 油門、↓ 煞車、← → 轉向、Shift 渦輪/衝刺、空白鍵手煞;<b>V 切視角</b>(或數字鍵 1~5)、<b>P 暫停</b>。載具可選 🏎️ 賽車 / 🏍️ 摩托車 / 🐎 馬。倒數到「1」或 GO 才踩油門=<b>完美起跑</b>送渦輪。「AI 輕扶回中」開了會輕輕把車拉回路中間,任何難度都能開;撞牆不會翻、卡住會自動放回賽道。雙人同機:P1 用 WASD、P2 用方向鍵(詳見「玩法」)。</p>
           <p class="home-hint" id="vehicleHint"></p>
           <p class="home-hint" id="homeRecord"></p>
-          <p class="home-hint ver-tag" id="verTag">版本 v4(2026-09-07)・載具選擇:🏎️ 賽車 / 🏍️ 摩托車(轉快、窄、抓地差)/ 🐎 馬(草地不減速、起步慢),電腦車三種混搭,雙人各選;駕駛座視角各有眼位(摩托車握把儀表、馬頭與韁繩);馬蹄與摩托車音色。v3(09-07)・暫停(P/Esc/⏸,切走分頁自動暫停)、每條賽道加「方向」逆走/鏡像/鏡像逆走(3 條變 12 條)、本機最佳紀錄(總時間+單圈,破紀錄有人聲)、完美起跑規則(GO 時踩油門送免費渦輪)、前三名彩帶、課堂排行房 🏆(平均時速上榜)。v2(09-06):極速提高(幼兒 86 → 職業 180 km/h)、「AI 輕扶回中」開關、起跑格可選、人聲播報、雙人同機分割畫面。v1(09-05)首發:三條賽道、五檔視角含駕駛座、AI 對手、溫柔規則。</p>
+          <p class="home-hint ver-tag" id="verTag">版本 v5(2026-09-07)・🎁 道具層:加速板(直線,送渦輪)/ 油漬(彎道內側,會滑不會翻)/ 星星(彎道外側,補滿渦輪),每圈重生、各撿各的,電腦車也會搶會閃,可在選單關掉;📅 今日挑戰:日期決定賽道/方向/圈數/難度/對手,全班同一題,支援 ?daily 深連結。v4(09-07)・載具選擇:🏎️ 賽車 / 🏍️ 摩托車(轉快、窄、抓地差)/ 🐎 馬(草地不減速、起步慢),電腦車三種混搭,雙人各選;駕駛座視角各有眼位(摩托車握把儀表、馬頭與韁繩);馬蹄與摩托車音色。v3(09-07)・暫停(P/Esc/⏸,切走分頁自動暫停)、每條賽道加「方向」逆走/鏡像/鏡像逆走(3 條變 12 條)、本機最佳紀錄(總時間+單圈,破紀錄有人聲)、完美起跑規則(GO 時踩油門送免費渦輪)、前三名彩帶、課堂排行房 🏆(平均時速上榜)。v2(09-06):極速提高(幼兒 86 → 職業 180 km/h)、「AI 輕扶回中」開關、起跑格可選、人聲播報、雙人同機分割畫面。v1(09-05)首發:三條賽道、五檔視角含駕駛座、AI 對手、溫柔規則。</p>
           <button class="start-button" id="startButton">開始比賽</button>
+          <button class="daily-button" id="dailyButton">📅 今日挑戰(全班同一題)</button>
+          <p class="home-hint" id="dailyHint"></p>
         </div>
       </div>
     </main>

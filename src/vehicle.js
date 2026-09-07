@@ -4,6 +4,7 @@
 //   ★ 轉向符號:steer=+1(按右)⇒ heading 遞減(從上往下看=順時鐘=往車子的右手邊轉)。
 // 溫柔規則:撞牆=彈開+掉速(不翻不爆)、出界=草地變慢、卡住 2.5 秒自動放回賽道。
 import { nearest, pointAtOffset, headingOfTangent, wrapDist, heightAt } from "./track.js";
+import { oilGripMul } from "./items.js";
 
 export const CAR = {
   length: 4.2, width: 1.9, wheelRadius: 0.36,
@@ -75,6 +76,7 @@ export function createCar({ x = 0, z = 0, heading = 0, y = 0, name = "車手", i
     turbo: 1, tired: false, boosting: false,
     trackIdx: -1, trackDist: 0, lateral: 0, latRate: 0, progress: 0, lap: 0,
     offTrack: false, wrongWay: false, wrongT: 0, stuckT: 0, bumpT: 0,
+    oilT: 0, stars: 0, pickedIds: null,   // v5 道具層:油漬剩餘秒數 / 撿到的星星 / 這一圈撿過的道具 id
     finished: false, finishTime: 0, lapTimes: [], lapStartT: 0, bestLap: 0,
     slopePitch: 0,
     wheelSpin: 0,
@@ -167,7 +169,8 @@ export function stepCar(car, input, dt, cfg, track, opts = {}) {
   car.heading = wrapAngle(car.heading + yaw * dt);
 
   // ── 橫向滑移:轉彎把一部分前進動量甩到外側,再被抓地吃掉(手煞=抓地變小=甩尾)
-  const grip = input.handbrake ? P.handbrakeGrip : cfg.grip * gripMul * (car.offTrack ? 0.75 : 1);
+  if (car.oilT > 0) car.oilT = Math.max(0, car.oilT - dt);                    // v5 油漬:只讓抓地變差(會滑、要自己修正),不旋轉不失控
+  const grip = (input.handbrake ? P.handbrakeGrip : cfg.grip * gripMul * (car.offTrack ? 0.75 : 1)) * oilGripMul(car);
   const latBefore = car.lat;
   car.lat += yaw * car.speed * P.slipGain * dt;    // yaw<0(右轉)⇒ lat<0(往左=外側);★ 要乘 dt(漏掉=每幀灌一秒的滑移,首跑實踩)
   car.lat *= Math.exp(-grip * dt);
@@ -255,7 +258,7 @@ export function rescue(car, track) {
   car.x = p.x; car.z = p.z; car.y = p.y;
   car.heading = p.heading;
   car.speed = 0; car.lat = 0; car.steer = 0; car.yawRate = 0; car.latRate = 0;
-  car.lateral = 0; car.offTrack = false; car.wrongWay = false; car.wrongT = 0; car.stuckT = 0; car.bumpT = 0;
+  car.lateral = 0; car.offTrack = false; car.wrongWay = false; car.wrongT = 0; car.stuckT = 0; car.bumpT = 0; car.oilT = 0;   // 救援也把油漬擦掉(不然放回去還在滑)
   const n = nearest(track, car.x, car.z, car.trackIdx);
   car.trackIdx = n.idx; car.trackDist = n.dist;
 }

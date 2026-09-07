@@ -2,6 +2,7 @@
 // 與玩家跑同一套 stepCar 物理、同一套渦輪計費(race-stage-kit ⑥:AI 加速也要錢,不然是永動機)。
 import { pointAtOffset, maxCurvatureAhead, wrapDist } from "./track.js";
 import { clamp, wrapAngle } from "./vehicle.js";
+import { aiItemBias } from "./items.js";
 
 /** 每台 AI 一份腦子狀態。seed 決定車道偏好與個性(可重現)。 */
 export function makeAiBrain(seed = Math.random(), cfg) {
@@ -19,7 +20,7 @@ export function makeAiBrain(seed = Math.random(), cfg) {
 }
 
 /** 給 AI 這幀的輸入。cars 是全部車(閃避用),player 給橡皮筋。 */
-export function aiInput(car, brain, track, cfg, dt, cars = [], player = null) {
+export function aiInput(car, brain, track, cfg, dt, cars = [], player = null, items = null) {
   const halfW = track.halfW;
   // 車道漫遊:每幾秒換一次偏好,慢慢滑過去(有人味,不像軌道車)
   brain.laneTimer -= dt;
@@ -39,7 +40,9 @@ export function aiInput(car, brain, track, cfg, dt, cars = [], player = null) {
       brain.avoid = clamp(brain.avoid - Math.sign(dl || 1) * 0.3, -1, 1);   // 肩並肩:也往外讓一點
     }
   }
-  const laneTarget = clamp(brain.lane + brain.avoid * 0.45, -0.55, 0.55) * halfW;
+  // v5 道具:靠向加速板/星星、閃開油漬(技巧越高越會用;沒開道具 items=null 就完全不影響)
+  const bias = items ? aiItemBias(car, items, track, 34, cfg.aiSkill) : { lane: 0, want: false };
+  const laneTarget = clamp(brain.lane + brain.avoid * 0.45 + bias.lane * 0.6, -0.62, 0.62) * halfW;
   brain.laneNow += (laneTarget - brain.laneNow) * Math.min(1, dt * 1.2);
 
   // 追點:前方 lookahead 公尺的車道點
@@ -85,8 +88,8 @@ export function aiInput(car, brain, track, cfg, dt, cars = [], player = null) {
 }
 
 /** 玩家自動駕駛(測試用「完美線」與展示)。 */
-export function autopilotInput(car, brain, track, cfg, dt, cars) {
-  return aiInput(car, brain, track, cfg, dt, cars, null);
+export function autopilotInput(car, brain, track, cfg, dt, cars, items = null) {
+  return aiInput(car, brain, track, cfg, dt, cars, null, items);
 }
 
 export { wrapDist };

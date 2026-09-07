@@ -1,8 +1,8 @@
 # racing3d — 3D 賽車・五檔視角(含駕駛座第一人稱)+ 雙人同機
 
 Three.js 街機賽車:自由移動的車體 + 閉環樣條賽道(3 基底 × 4 方向 = 12 條)+ 五檔視角(追尾/車頭/駕駛座/高空俯瞰/轉播機位)+ AI 對手 + 溫柔規則
-+ 分割畫面雙人同機 + 預烤人聲播報 + 暫停 / 完美起跑 / 本機紀錄 / 課堂排行房 / 彩帶 + **載具三型(賽車/摩托車/馬,同場混搭)**。
-2026-09-05 開工、09-06 v2、09-07 v3 與 v4(規劃見記憶 racing3d-plan)。現況以 `讀我-HANDOFF.txt` ★段為準,待做見 `roadmap.md`。
++ 分割畫面雙人同機 + 預烤人聲播報 + 暫停 / 完美起跑 / 本機紀錄 / 課堂排行房 / 彩帶 + **載具三型** + **道具層** + **今日挑戰 ?daily**。
+2026-09-05 開工、09-06 v2、09-07 v3/v4/v5(規劃見記憶 racing3d-plan)。現況以 `讀我-HANDOFF.txt` ★段為準,待做見 `roadmap.md`。
 
 ## 指令
 
@@ -17,6 +17,8 @@ Three.js 街機賽車:自由移動的車體 + 閉環樣條賽道(3 基底 × 4 �
 | 檔 | 職責 |
 |---|---|
 | `src/track.js` | ★地基:閉環 Catmull-Rom 等弧長取樣 2000 點 + 高度剖面(smoothstep 關鍵影格)。`posAt(dist)`、`nearest(x,z,hint)`(里程/帶號橫向/高度)、`pointAtOffset`、`tvCameraSpots`。`BASE_TRACKS` 一條賽道一筆資料,加賽道不加程式;`variantOf` 展開 逆走(控制點反序+高度 u→1−u)/ 鏡像(x 取負)⇒ `TRACKS` 12 條 |
+| `src/items.js` | **v5 道具層**(純函數,不 import THREE):`ITEM_TYPES` 三種 + `ITEM_GEN` 生成參數;`buildItems` 依幾何生成、`stepItems` 區間判定拾取、`applyItem` 套效果、`aiItemBias` 給 AI、`oilGripMul` 給 stepCar |
+| `src/daily.js` | **v5 今日挑戰**:`dailyKey`(台北時區)、`dailyChallenge`(日期→設定)、`dailyRecordKey`、`wantsDaily`(?daily 正則) |
 | `src/vehicles.js` | **v4 載具資料層**(純資料,不 import THREE):`VEHICLES` 三型 = 參數倍率 `over` + 駕駛座眼位 `eye` + 車頭眼位 `hood` + 音色 + 衝刺條名稱 + 說明;`vehicleParams(id)` = `{...CAR, accelMul:1, gripMul:1, ...over}`(賽車逐鍵 == CAR ⇒ 舊 77 項車體測試不變);`aiVehicleFor(i, offset)` 混搭 |
 | `src/rigs.js` | **v4 摩托車/馬的 3D 外型**,與 `_makeCarRig` 同一回傳契約(多 `kind` / `leanIn` / `anim`)。馬照 mount-riding-kit 馬體鐵則(矩形身體、長腿 v3、鬃毛三件套、雙眼雙耳);騎士照 3d-figure-kit 臉部鐵則(眼白+瞳孔+微笑+耳前無髮) |
 | `src/vehicle.js` | 街機車體純函數 `stepCar`:油門/煞車/倒車、轉向率隨速度、橫向滑移(甩尾)、渦輪計費(遲滯)、出界變慢、撞牆彈開、逆向偵測、卡住自動救援、圈數。**`ASSIST` PD 輔助**與 `assistStrength()` 三態。`resolveCollisions` 車對車溫柔推開。`DIFFICULTY` 五檔 |
@@ -37,6 +39,17 @@ Three.js 街機賽車:自由移動的車體 + 閉環樣條賽道(3 基底 × 4 �
   預設玩家排**最後一排**(後面沒車擋追尾鏡頭、超車才好玩),選單可改最前排;雙人一定同一排(P1 左 P2 右,跟分割畫面一致)。
 - 雙人:`car.playerIdx` = 視窗索引 = `cams` 索引 = P1/P2。單閘門 `is2P()`,別另開旗標。
 - 賽道 id:基底 `meadow`;變體 `meadow-rev` / `meadow-mir` / `meadow-mirrev`(`trackIdOf(base, variant)`)。正走 label 不加後綴,變體加「・逆走」等;`TRACKS[id].base / .variant` 給選單還原。變體是不同賽道 ⇒ 紀錄分開。
+
+## v5 道具層 + 今日挑戰(0907)
+
+- **道具不手工擺**:`buildItems(track, density)` 依**賽道幾何**生成——曲率 < `straightK` 放加速板(中線)、> `cornerK` 時擲骰放油漬(內側 0.42 半寬)或星星(外側 0.66 半寬);`trackId` 當 FNV 種子 ⇒ 同賽道每次一樣、12 條變體各自不同、**加新賽道不用補資料**。起跑線前後 `edgeGap` 40m 留白(不然一開賽就吃到)。
+- **拾取用區間判定不是點判定**:`stepItems(car, items, prevDist, track)` 比「這一幀走過的里程區間」有沒有跨過道具,所以**高速不會穿透**(測試釘死:一幀跨 23m 仍撿得到)。停著/倒退不吃。
+- **每圈重生、各撿各的**:每台車自己的 `car.pickedIds`(Set),`lap` 事件時 `respawnForCar` 清空 ⇒ 多人不互搶(教室情境不吵架)。視覺上只藏 **P1** 撿走的(`_syncItems`)。
+- **效果都走既有管線**:加速板 = `car.startBoostT`(v3 完美起跑那條免費渦輪,燃料不扣);星星 = `car.stars++` + 渦輪補滿;油漬 = `car.oilT`,`stepCar` 用 `oilGripMul(car)` 乘在 grip 上。**溫柔規則:油漬只讓抓地變差,不旋轉不失控不停車。**
+- **AI 也吃**:`aiItemBias` 看前方 34m 最近的一個 ⇒ 靠向加速板/星星、往反側閃油漬;`items=null` 時完全不影響(關掉道具 = v4 的 AI)。
+- ★ **視覺兩次才對**(0907 截圖抓到):第一版油漬是純深色(0x2b2b33)在深灰路面(0x4a4e57)上**等於隱形**,孩子只會覺得莫名其妙滑了一下 ⇒ 加**亮紫外圈**;星星加**地面光環 + 光柱**;加速板加大到 4.0×6.8 + 白外框 + 三排 V 形箭頭。**測試全綠也看不出這種病,只有截圖看得到**(同地雷 2 那一族)。
+- **今日挑戰**:`dailyChallenge(key)` 用台北時區日期 → FNV → mulberry32 決定賽道/方向/圈數/難度/對手/道具。刻意夾在課堂尺度(≤3 圈、對手 ≤4、**不含 hard**),固定單人 + 最後一排 + 輔助自動。載具**沿用玩家自己選的**(那是偏好不是題目)。成績記在 `daily|<日期>` 這格,不跟一般紀錄混。`?daily` 深連結走 `setTimeout 0` + try/catch(火花 #daily 卡直達)。
+- ⚠ `backToMenu` 也要清 `dailyKey`(0907 真瀏覽器驗收抓到:只在 `startRace` 清不夠,回選單後徽章還亮著)。
 
 ## v4 載具(0907 使用者拍板:首批摩托車+馬、同場混搭)
 
@@ -104,7 +117,7 @@ npm test && npm run build && npx wrangler deploy --name hfpc-racing3d --assets d
   ⚠ **為什麼是 Workers 不是 Pages**:CF 帳號被擋的**只有「建新 Pages 專案」**(code 8000030;四個不相關名字全被拒 ⇒ **帳號層級**,不是某個名字被封),**建新 Worker 名沒被擋**(0907 三次獨立實測 + 憫安站真的上線)⇒ 走 Workers assets,不必等申訴。想要 `pages.dev` 網址才要等桌面 `Cloudflare申訴信-2026-09-03.txt` 寄出並通過。
   ★ **為什麼趁 0907 搬**:換 origin 會讓玩家的**本機最佳紀錄(localStorage)歸零**——0907 統計是 2 開 1 完、全是驗收場,**還沒有孩子玩過**,所以這個代價當下等於零;一旦主日學用過就再也回不到這個價格。
   ★ **舊 Netlify 站的 301 殼**(源碼不在版控,三個檔,要重建時照抄):`_redirects` = `/*  https://hfpc-racing3d.summer09201017.workers.dev/:splat  301!`、`netlify.toml` = `[build] ignore = "exit 0"`、一頁 `index.html`(meta refresh + canonical + 一行「請把書籤改成新網址」)。部署:`npx netlify deploy --prod --dir . --site 4d240b0c-e780-4962-bf85-30779e678b64 --no-build`。
-- **更新流程(★ git push 不會上線,一定要重跑 deploy)**:見本段開頭的 wrangler 指令。殼層(index.html / sw.js / manifest / voice)有改就 bump sw `CACHE`(目前 `racing3d-v4`)。
+- **更新流程(★ git push 不會上線,一定要重跑 deploy)**:見本段開頭的 wrangler 指令。殼層(index.html / sw.js / manifest / voice)有改就 bump sw `CACHE`(目前 `racing3d-v5`)。
   ⚠ `--assets dist` 只上傳 build 產物 27 檔(源碼/設定/測試/文件都不在裡面,0907 逐條 curl 驗過全 404)⇒ **不需要 `.assetsignore`**(那只有 `--assets .` 才要)。
 - psPing id `racing3d`(index.html)、`racing3d-done` / `racing3d-dwell`(main.js)——beacon 只排除 localhost、不認 hostname,**換平台不用改、統計不斷線**;verTag 在 `index.html #verTag`。
 - **帳本(0907 搬站後現況)**:實際帶網址的只有**三處**,0907 都已改成 workers.dev 並線上驗過:①奧運頁卡 `Desktop/hfpc-olympics/index.html`(改完要 `wrangler deploy --name hfpc-olympics --assets .`)②作品集 `hfpc-portfolio/data.js`(同樣 wrangler)③`hfpc-claude-skills` 的 `references/machine-env-0714/gamefleet/sites.json`。

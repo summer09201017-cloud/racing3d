@@ -9,8 +9,10 @@ import { CAR, DIFFICULTY, ASSIST_MODES, ASSIST_LABELS, assistStrength, createCar
 import { makeAiBrain, aiInput } from "./ai.js";
 import { VEHICLES, VEHICLE_IDS, vehicleParams, aiVehicleFor } from "./vehicles.js";
 import { makeMotoRig, makeHorseRig } from "./rigs.js";
+import { ITEM_TYPES, buildItems, stepItems, respawnForCar } from "./items.js";
+import { dailyChallenge, dailyKey } from "./daily.js";
 
-export { TRACKS, TRACK_IDS, BASE_TRACKS, BASE_TRACK_IDS, TRACK_VARIANTS, VARIANT_LABELS, trackIdOf, DIFFICULTY, ASSIST_MODES, ASSIST_LABELS, VEHICLES, VEHICLE_IDS };
+export { TRACKS, TRACK_IDS, BASE_TRACKS, BASE_TRACK_IDS, TRACK_VARIANTS, VARIANT_LABELS, trackIdOf, DIFFICULTY, ASSIST_MODES, ASSIST_LABELS, VEHICLES, VEHICLE_IDS, ITEM_TYPES, dailyChallenge, dailyKey };
 
 /* 模式(duel-2p-kit 單閘門:所有分歧只問 is2P()):solo=單人;duel2p=雙人同機分割畫面(左 P1 藍、右 P2 紅,鐵則色)。 */
 export const MODES = { solo: { id: "solo", label: "單人" }, duel2p: { id: "duel2p", label: "雙人同機(分割畫面)" } };
@@ -37,7 +39,7 @@ export const CAR_COLORS = [
 export const LAP_OPTIONS = [1, 2, 3, 5];
 export const AI_OPTIONS = [0, 1, 2, 3, 5];
 export const AI_NAMES = ["阿福", "小美", "大衛", "以諾", "米迦", "撒拉", "約書亞"];
-export const DEFAULT_SETTINGS = { trackId: "meadow", laps: 3, aiCount: 3, difficulty: "easy", colorIdx: 0, mode: "solo", assist: "auto", gridPos: "last", vehicle: "car", vehicle2: "car" };
+export const DEFAULT_SETTINGS = { trackId: "meadow", laps: 3, aiCount: 3, difficulty: "easy", colorIdx: 0, mode: "solo", assist: "auto", gridPos: "last", vehicle: "car", vehicle2: "car", items: true };
 const COUNTDOWN_SECONDS = 3.6;
 /* 完美起跑(v3 規則,0907):GO 之後 window 秒內踩油門、而且油門「連續按住」還不到 hold 秒(倒數到「1」才踩算,從「3」就一直按不算)
    ⇒ 免費渦輪 boostSeconds 秒(燃料每幀退回,不碰 stepCar 物理)。太早按不罰、只提醒(溫柔規則)。
@@ -57,6 +59,8 @@ export class RacingGame {
     this.input = emptyInput();    // P1
     this.input2 = emptyInput();   // P2(雙人同機)
     this.autopilot = false;       // 測試/展示:玩家車(全部人類車)交給 AI
+    this.items = []; this.itemMeshes = new Map();   // v5 道具層(整段可刪不傷核心:items=[] 就是 v4 行為)
+    this.dailyKey = null;         // 今日挑戰:非 null 表示這一場是每日題
     this.paused = false;          // 暫停(v3):只在倒數/比賽中;整個世界凍住(物理/計時/鏡頭都不推),render 照畫最後一幀
     this.cars = []; this.rigs = new Map(); this.brains = new Map();
     this.player = null;           // P1(相容舊呼叫)
@@ -120,6 +124,7 @@ export class RacingGame {
     this.settings.trackId = id;
     this.track = buildTrack(TRACKS[id]);
     this.tvSpots = tvCameraSpots(this.track, 150);
+    this.items = buildItems(this.track, this.settings.items === false ? 0 : 1);
     for (const c of this.cams) c.tvIdx = -1;
     this._clearCars();
     this._buildWorld();
@@ -164,8 +169,56 @@ export class RacingGame {
     this._buildScenery(scene);
     this._buildSkyDressing(scene);
     this._buildTvTripods(scene);
+    this._buildItems(scene);
 
     this.scene = scene;
+  }
+
+  /** 道具的 3D 物件:加速板=綠底白箭頭貼地、油漬=深色扁橢圓、星星=金色八面體會轉。 */
+  _buildItems(scene) {
+    this.itemMeshes = new Map();
+    if (!this.items || !this.items.length) return;
+    for (const it of this.items) {
+      const cfg = ITEM_TYPES[it.type];
+      const g = new THREE.Group();
+      g.position.set(it.x, it.y, it.z);
+      if (it.type === "boost") {
+        // 加速板:亮綠底 + 白外框 + 三排大 V 形箭頭(0907 截圖抓到:原本太小太暗,車一壓上去就看不出是什麼)
+        const p = posAt(this.track, it.dist);
+        g.rotation.y = Math.atan2(p.tx, p.tz);
+        const frame = new THREE.Mesh(new THREE.PlaneGeometry(4.6, 7.4), new THREE.MeshBasicMaterial({ color: 0xffffff }));
+        frame.rotation.x = -Math.PI / 2; frame.position.y = 0.022; g.add(frame);
+        const pad = new THREE.Mesh(new THREE.PlaneGeometry(4.0, 6.8), new THREE.MeshBasicMaterial({ color: cfg.color }));
+        pad.rotation.x = -Math.PI / 2; pad.position.y = 0.03; g.add(pad);
+        for (const dz of [-1.9, 0, 1.9]) {
+          for (const sx of [-1, 1]) {
+            const bar = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.05, 0.55), new THREE.MeshBasicMaterial({ color: 0xffffff }));
+            bar.position.set(sx * 0.72, 0.05, dz); bar.rotation.y = sx * 0.66; g.add(bar);
+          }
+        }
+      } else if (it.type === "oil") {
+        // 油漬:深色池 + **亮紫外圈**(0907 截圖抓到:純深色在深灰路面上等於隱形,孩子只會覺得莫名其妙滑了一下)
+        const ring = new THREE.Mesh(new THREE.RingGeometry(cfg.radius * 0.98, cfg.radius * 1.32, 24), new THREE.MeshBasicMaterial({ color: 0xa98cff, side: THREE.DoubleSide }));
+        ring.rotation.x = -Math.PI / 2; ring.position.y = 0.022; ring.scale.set(1.25, 0.9, 1); g.add(ring);
+        const pool = new THREE.Mesh(new THREE.CircleGeometry(cfg.radius, 22), new THREE.MeshBasicMaterial({ color: cfg.color }));
+        pool.rotation.x = -Math.PI / 2; pool.position.y = 0.032; pool.scale.set(1.25, 0.9, 1); g.add(pool);
+        for (const [ox, oz, r] of [[0.5, 0.3, 0.55], [-0.6, -0.4, 0.42], [0.2, -0.7, 0.3]]) {
+          const sheen = new THREE.Mesh(new THREE.CircleGeometry(r, 14), new THREE.MeshBasicMaterial({ color: 0x7b5fd6 }));
+          sheen.rotation.x = -Math.PI / 2; sheen.position.set(ox, 0.038, oz); g.add(sheen);
+        }
+      } else {
+        // 星星:金色八面體 + 地面光環 + 光柱(遠遠就看得到,值得繞過去撿)
+        const halo = new THREE.Mesh(new THREE.RingGeometry(1.0, 1.5, 20), new THREE.MeshBasicMaterial({ color: cfg.color, transparent: true, opacity: 0.55, side: THREE.DoubleSide }));
+        halo.rotation.x = -Math.PI / 2; halo.position.y = 0.03; g.add(halo);
+        const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.5, 2.6, 10, 1, true), new THREE.MeshBasicMaterial({ color: cfg.color, transparent: true, opacity: 0.16, side: THREE.DoubleSide }));
+        beam.position.y = 1.3; g.add(beam);
+        const star = new THREE.Mesh(new THREE.OctahedronGeometry(1.05), new THREE.MeshLambertMaterial({ color: cfg.color, emissive: 0xffb020, emissiveIntensity: 0.9 }));
+        star.position.y = 1.45; star.scale.set(1, 1.4, 1); g.add(star);
+        g.userData.spin = star;
+      }
+      scene.add(g);
+      this.itemMeshes.set(it.id, g);
+    }
   }
 
   /** 沿樣條的帶狀幾何:lateral fromL..toL,y 偏移 yOff;dropOuter=外緣降到地面(邊坡裙);dash=每 n 個樣本畫/不畫。 */
@@ -572,9 +625,11 @@ export class RacingGame {
     if (!GRID_OPTIONS.includes(next.gridPos)) next.gridPos = "last";
     if (!VEHICLES[next.vehicle]) next.vehicle = "car";
     if (!VEHICLES[next.vehicle2]) next.vehicle2 = "car";
+    next.items = next.items !== false;
+    const itemsChanged = (next.items !== false) !== (this.settings.items !== false);
     const trackChanged = next.trackId !== this.settings.trackId || !this.scene;
     this.settings = next;
-    if (trackChanged) this.setTrack(next.trackId);
+    if (trackChanged || itemsChanged) this.setTrack(next.trackId);   // 道具開關切換=整個場景重建(乾淨無殘留)
     this._clearCars();
     const t = this.track, L = t.length;
     const cfg = DIFFICULTY[next.difficulty];
@@ -608,10 +663,12 @@ export class RacingGame {
       car.progress = -(L - d);
       car.lap = 0; car.lapStartT = 0; car.lapTimes = []; car.bestLap = 0; car.finished = false; car.turbo = 1;
       car.startBoostT = 0; car.holdT = 0; car.startJudged = false;   // 完美起跑狀態
+      car.oilT = 0; car.stars = 0; if (car.pickedIds) car.pickedIds.clear();   // v5 道具狀態
       this._syncRig(car, 0);
     });
     this.phase = "countdown";
     this.paused = false;
+    this.dailyKey = null;   // 一般開賽=不是每日題(startDaily 會在之後補回)
     this.countdownT = COUNTDOWN_SECONDS; this._cdLast = 99;
     this.raceT = 0; this.finishOrder = []; this.results = null; this._allAiDoneT = 0; this._allAiDoneSaid = false;
     this.input = emptyInput(); this.input2 = emptyInput();
@@ -623,9 +680,19 @@ export class RacingGame {
     this.pushHud();
   }
 
+  /** 今日挑戰(v5):日期種子決定賽道/方向/圈數/難度/對手/道具;回傳那份設定給 UI 顯示。 */
+  startDaily(key = dailyKey()) {
+    const d = dailyChallenge(key);
+    this.startRace({ ...this.settings, ...d, vehicle: this.settings.vehicle });   // 載具沿用玩家自己選的(那是偏好不是題目)
+    this.dailyKey = d.key;
+    this.pushHud();
+    return d;
+  }
+
   backToMenu() {
     this.phase = "menu";
     this.paused = false;
+    this.dailyKey = null;   // 回選單也要清今日題標記(0907 真瀏覽器驗收抓到:只在 startRace 清不夠)
     this.results = null;
     this._placeMenuCar();
     this._snapCams();
@@ -766,6 +833,7 @@ export class RacingGame {
     }
 
     for (const car of this.cars) this._syncRig(car, dt);
+    this._syncItems(dt);
     this._updateCamera(this.cams[0], dt);
     if (this.is2P()) this._updateCamera(this.cams[1], dt);
     this.pushHud();
@@ -781,10 +849,11 @@ export class RacingGame {
       else {
         let brain = this.brains.get(car);
         if (!brain) { brain = makeAiBrain(0.5, cfg); this.brains.set(car, brain); }
-        input = aiInput(car, brain, t, cfg, dt, this.cars, this.player);
+        input = aiInput(car, brain, t, cfg, dt, this.cars, this.player, this.items);
         if (car.finished) { input.throttle = Math.min(input.throttle, 0.35); input.boost = false; }   // 完賽=慢慢繞
       }
       // 人類車吃選單的「AI 輕扶回中」開關;AI 車照難度預設(它本來就會自己轉)
+      const prevDist = car.trackDist;
       let evs;
       if (car.startBoostT > 0) {
         // 完美起跑:免費渦輪 —— 強制 boost、燃料退回;不碰 stepCar 物理(渦輪音效/火焰照走 boost 事件)
@@ -794,6 +863,9 @@ export class RacingGame {
         car.startBoostT = Math.max(0, car.startBoostT - dt);
       } else evs = stepCar(car, input, dt, cfg, t, { raceT: this.raceT, assist: car.isPlayer ? assist : cfg.assist });
       for (const e of evs) this._onCarEvent(car, e);
+      if (this.items.length && this.phase === "racing") {
+        for (const hit of stepItems(car, this.items, prevDist, t)) this._onItemHit(car, hit);
+      }
       if (!car.finished && car.lap >= this.settings.laps) {
         car.finished = true; car.finishTime = this.raceT;
         this.finishOrder.push(car);
@@ -814,8 +886,20 @@ export class RacingGame {
     }
   }
 
+  /** 道具命中:玩家出字幕/音效/播報,AI 只吃效果。 */
+  _onItemHit(car, hit) {
+    const cfg = ITEM_TYPES[hit.type];
+    if (!car.isPlayer) return;
+    const p = car.playerIdx, who = this.is2P() ? `${this._pName(car)} ` : "";
+    if (hit.type === "boost") this.say(`${who}⚡ 加速板!`, 1.2);
+    else if (hit.type === "oil") this.say(`${who}🛢️ 踩到油漬,會滑一下!`, 1.8);
+    else this.say(`${who}⭐ 星星 ×${car.stars}!渦輪補滿`, 1.5);
+    this._emit("item", { type: hit.type, p, stars: car.stars, label: cfg.label });
+  }
+
   _onCarEvent(car, e) {
     const type = typeof e === "string" ? e : e.type;
+    if (type === "lap") respawnForCar(car);   // v5:過線 ⇒ 這一圈撿過的道具重生(每台車各自,不互搶)
     if (car.isPlayer) {
       const p = car.playerIdx, who = this.is2P() ? `${this._pName(car)} ` : "";
       const cs = this.cams[p];
@@ -840,7 +924,7 @@ export class RacingGame {
     const ranked = this.rankedCars();
     const rows = ranked.map((c, i) => ({
       rank: i + 1, name: c.name, isPlayer: !!c.isPlayer, playerIdx: c.isPlayer ? c.playerIdx : -1, colorHex: CAR_COLORS[c.colorIdx].hex,
-      vehicle: c.vehicle, vehicleEmoji: (VEHICLES[c.vehicle] || VEHICLES.car).emoji,
+      vehicle: c.vehicle, vehicleEmoji: (VEHICLES[c.vehicle] || VEHICLES.car).emoji, stars: c.stars || 0,
       time: c.finished ? c.finishTime : null, progress: c.progress, bestLap: c.bestLap || null,
     }));
     const medalOf = (rank) => rank === 1 ? "🥇" : rank === 2 ? "🥈" : rank === 3 ? "🥉" : "🏁";
@@ -860,6 +944,8 @@ export class RacingGame {
       time: this.player.finishTime, time2: this.is2P() ? this.players[1].finishTime : null,
       bestLap: this.player.bestLap, laps: this.settings.laps, rows, trackLabel: this.track.label, difficulty: DIFFICULTY[this.settings.difficulty].label,
       bestLap2: this.is2P() ? this.players[1].bestLap : null,
+      stars: this.player.stars || 0, stars2: this.is2P() ? (this.players[1].stars || 0) : null,
+      items: this.settings.items !== false, dailyKey: this.dailyKey,
       trackId: this.settings.trackId, difficultyId: this.settings.difficulty, trackLength: this.track.length,   // 給本機紀錄與排行房折算平均時速
     };
     this.say(`${medal} ${title}`, 5);
@@ -913,6 +999,18 @@ export class RacingGame {
     // 駕駛座視角:藏車艙/窗/駕駛頭(只對人類車、且他自己的視窗選駕駛座);其他車照常。雙人渲染時 render() 每一刀再覆寫。
     const cockpitNow = car.isPlayer && this.phase !== "menu" && !!this.cams[car.playerIdx] && this.cams[car.playerIdx].view === "cockpit";
     for (const m of rig.hide) m.visible = !cockpitNow;
+  }
+
+  /** 道具視覺:玩家(P1)撿走的先藏起來、過線再出現;星星緩轉。visible 一律嚴格 boolean。 */
+  _syncItems(dt) {
+    if (!this.itemMeshes.size) return;
+    const me = this.player;
+    const picked = me && me.pickedIds ? me.pickedIds : null;
+    for (const [id, g] of this.itemMeshes) {
+      g.visible = !(picked && picked.has(id));
+      const spin = g.userData && g.userData.spin;
+      if (spin && g.visible) { spin.rotation.y += dt * 1.6; spin.position.y = 1.25 + Math.sin(this.time * 2.2) * 0.12; }
+    }
   }
 
   /* ───────────────────────── 鏡頭 ───────────────────────── */
@@ -1061,7 +1159,7 @@ export class RacingGame {
       lap: Math.min(this.settings.laps, Math.max(1, p.lap + 1)), rank: ranked.indexOf(p) + 1,
       turbo: p.turbo, tired: !!p.tired, boosting: !!p.boosting, finished: !!p.finished,
       lapT: p.finished ? (p.lapTimes[p.lapTimes.length - 1] || 0) : Math.max(0, this.raceT - p.lapStartT), bestLap: p.bestLap,
-      wrongWay: !!p.wrongWay, offTrack: !!p.offTrack,
+      wrongWay: !!p.wrongWay, offTrack: !!p.offTrack, stars: p.stars || 0, oiled: (p.oilT || 0) > 0,
       camView: this.cams[1].view, camLabel: CAM_LABELS[this.cams[1].view], activeView: this.activeView(1),
       vehicle: p.vehicle,
     };
@@ -1088,6 +1186,7 @@ export class RacingGame {
       lapT: p ? (p.finished ? (p.lapTimes[p.lapTimes.length - 1] || 0) : Math.max(0, this.raceT - p.lapStartT)) : 0,
       bestLap: p ? p.bestLap : 0,
       wrongWay: !!(p && p.wrongWay), offTrack: !!(p && p.offTrack),
+      stars: p ? (p.stars || 0) : 0, oiled: !!(p && (p.oilT || 0) > 0), itemsOn: this.settings.items !== false, dailyKey: this.dailyKey,
       camView: this.cams[0].view, camLabel: CAM_LABELS[this.cams[0].view], activeView: this.activeView(0),
       message: this.message,
       results: this.results,

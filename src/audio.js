@@ -143,5 +143,9 @@ export class AudioManager {
     seq.forEach((f, i) => this.tone({ f, dur: 0.28, type: "triangle", gain: 0.16, when: i * 0.16 }));
     if (rank === 1) this.tone({ f: 1568, dur: 0.6, type: "triangle", gain: 0.14, when: 0.9 });
   }
+  /* v5 道具:加速板=上揚和弦、星星=清脆三連音、油漬=低沉滑落(一聽就知道是好是壞) */
+  itemBoost() { this.tone({ f: 420, fEnd: 1100, dur: 0.35, type: "sawtooth", gain: 0.1 }); this.tone({ f: 630, fEnd: 1650, dur: 0.35, type: "triangle", gain: 0.07, when: 0.03 }); }
+  itemStar() { [1046, 1318, 1568].forEach((f, i) => this.tone({ f, dur: 0.14, type: "triangle", gain: 0.13, when: i * 0.07 })); }
+  itemOil() { this.tone({ f: 300, fEnd: 90, dur: 0.45, type: "sawtooth", gain: 0.09 }); this.noise({ dur: 0.5, gain: 0.1, f: 380, q: 0.6 }); }
   uiTap() { this.tone({ f: 540, fEnd: 760, dur: 0.07, type: "triangle", gain: 0.06 }); }
 }

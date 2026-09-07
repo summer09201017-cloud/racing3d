@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "node test/track.test.mjs && node test/vehicle.test.mjs && node test/race.test.mjs && node test/race2p.test.mjs && node test/commentary.test.mjs && node test/v3.test.mjs && node test/vehicles.test.mjs",
+    "test": "node test/track.test.mjs && node test/vehicle.test.mjs && node test/race.test.mjs && node test/race2p.test.mjs && node test/commentary.test.mjs && node test/v3.test.mjs && node test/vehicles.test.mjs && node test/v5.test.mjs",
     "voice": "node scripts/gen-voice.mjs",
     "check": "node scripts/browser-check.mjs",
     "check:local": "node scripts/check-local.mjs"

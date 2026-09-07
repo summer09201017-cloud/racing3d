@@ -205,6 +205,72 @@ await page.selectOption("#vehicleSelect", "car");
 await page.waitForTimeout(200);
 ok(await page.evaluate(() => window.__racing3d.rigs.get(window.__racing3d.player).kind === "car"), "切回賽車");
 
+// ── v5(0907):道具層 + 今日挑戰 ──
+ok(await page.evaluate(() => document.querySelectorAll("#itemsSelect option").length === 2), "道具選單 2 檔");
+const itemsInfo = await page.evaluate(() => { const g = window.__racing3d; const k = {}; for (const it of g.items) k[it.type] = (k[it.type] || 0) + 1; return { n: g.items.length, kinds: k, meshes: g.itemMeshes.size }; });
+ok(itemsInfo.n > 5 && itemsInfo.meshes === itemsInfo.n, `選單期就有道具 ${itemsInfo.n} 個(mesh ${itemsInfo.meshes})`);
+ok(Object.keys(itemsInfo.kinds).length >= 2, `種類 ${JSON.stringify(itemsInfo.kinds)}`);
+await page.selectOption("#lapsSelect", "1");
+await page.selectOption("#aiSelect", "3");
+await page.click("#startButton");
+await page.waitForTimeout(300);
+if (await page.isVisible("#helpOverlay.visible")) await page.click("#helpCloseButton");
+await page.evaluate(() => { window.__racing3d.autopilot = true; });
+await page.waitForTimeout(4500);
+// 起跑線前後 40m 刻意沒放道具(edgeGap),真實時間 4.5 秒可能還沒跑到第一個 ⇒ 同步快轉 8 秒讓它真的壓過去
+await page.evaluate(() => { const g = window.__racing3d; for (let i = 0; i < 60 * 8; i++) g.update(1 / 60); });
+await page.waitForTimeout(400);
+await page.screenshot({ path: OUT + "19-items-track.png" });
+const picked = await page.evaluate(() => { const g = window.__racing3d; return { mine: g.player.pickedIds ? g.player.pickedIds.size : 0, all: g.cars.reduce((s, c) => s + (c.pickedIds ? c.pickedIds.size : 0), 0), stars: g.player.stars, star: document.getElementById("starText").textContent, hidden: [...g.itemMeshes.values()].filter((m) => m.visible === false).length }; });
+ok(picked.all > 0, `跑 6 秒全場撿到 ${picked.all} 個道具(我 ${picked.mine} 個)`);
+ok(/^⭐ \d+$/.test(picked.star), `HUD 星星欄「${picked.star}」`);
+ok(picked.hidden === picked.mine, `撿走的 ${picked.mine} 個 mesh 已藏起(visible 嚴格 false)`);
+const itemHud = await page.evaluate(() => ["raceCard", "speedPanel", "statusMessage"].map((id) => document.getElementById(id).textContent).join(" | "));
+ok(!/undefined|NaN/.test(itemHud), "道具 HUD 無 undefined/NaN");
+const finItems = await page.evaluate(() => { const g = window.__racing3d; for (let i = 0; i < 60 * 240 && g.phase !== "finished"; i++) g.update(1 / 60); return { phase: g.phase, stars: g.results && g.results.stars, items: g.results && g.results.items }; });
+ok(finItems.phase === "finished" && finItems.items === true && Number.isInteger(finItems.stars), `開道具完賽、結算星星 ${finItems.stars}`);
+await page.waitForTimeout(1600);
+ok(/星星/.test(await page.textContent("#recordText")), "結算有星星那行");
+await page.screenshot({ path: OUT + "20-items-results.png" });
+await page.click("#resultMenuButton");
+await page.waitForTimeout(400);
+// 關掉道具 ⇒ 場上清空
+await page.selectOption("#itemsSelect", "off");
+await page.waitForTimeout(400);
+ok(await page.evaluate(() => window.__racing3d.items.length === 0 && window.__racing3d.itemMeshes.size === 0), "關道具 ⇒ 場上一個都沒有");
+await page.selectOption("#itemsSelect", "on");
+await page.waitForTimeout(400);
+ok(await page.evaluate(() => window.__racing3d.items.length > 5), "開回來 ⇒ 道具又長出來");
+// 今日挑戰:鈕 + 深連結
+const dailyHint = await page.textContent("#dailyHint");
+ok(/今日挑戰/.test(dailyHint) && !/undefined|NaN/.test(dailyHint), `首頁今日挑戰提示「${dailyHint.slice(0, 42)}」`);
+await page.screenshot({ path: OUT + "21-home-daily.png" });
+await page.click("#dailyButton");
+await page.waitForTimeout(400);
+if (await page.isVisible("#helpOverlay.visible")) await page.click("#helpCloseButton");
+const daily = await page.evaluate(() => { const g = window.__racing3d; return { key: g.dailyKey, track: g.settings.trackId, laps: g.settings.laps, diff: g.settings.difficulty, ai: g.settings.aiCount, badge: !document.getElementById("dailyBadge").hidden }; });
+ok(/^\d{4}-\d{2}-\d{2}$/.test(daily.key || ""), `今日挑戰開起來了 ${daily.key}`);
+ok(daily.laps <= 3 && daily.diff !== "hard" && daily.ai <= 4, `今日題在課堂尺度 ${daily.laps}圈/${daily.diff}/${daily.ai}台`);
+ok(daily.badge, "HUD 顯示今日挑戰徽章");
+await page.evaluate(() => { window.__racing3d.autopilot = true; });
+await page.waitForTimeout(2500);
+await page.screenshot({ path: OUT + "22-daily-race.png" });
+await page.click("#menuButton");
+await page.waitForTimeout(400);
+ok(await page.evaluate(() => window.__racing3d.dailyKey === null), "回選單清掉今日題標記");
+// ?daily 深連結:零點擊直接開題
+const page2 = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+const errors2 = [];
+page2.on("pageerror", (e) => errors2.push(String(e)));
+await page2.goto(CHECK_URL.replace(/\/?$/, "/") + "?daily", { waitUntil: "load" });
+await page2.waitForFunction(() => window.__racing3d && window.__racing3d.scene, null, { timeout: 15000 });
+await page2.waitForTimeout(1500);
+const deep = await page2.evaluate(() => ({ key: window.__racing3d.dailyKey, phase: window.__racing3d.phase, home: document.getElementById("homeScreen").classList.contains("visible") }));
+ok(/^\d{4}-\d{2}-\d{2}$/.test(deep.key || "") && !deep.home, `?daily 深連結零點擊直接開題(${deep.key} / ${deep.phase})`);
+ok(errors2.length === 0, `?daily 頁面 0 pageerror(${errors2.length})`);
+await page2.screenshot({ path: OUT + "23-deeplink-daily.png" });
+await page2.close();
+
 // ── v2(0906):選單新選項 / 人聲 manifest / 雙人同機分割畫面 ──
 ok(await page.isVisible("#modeSelect") && await page.isVisible("#assistSelect") && await page.isVisible("#gridSelect"), "選單有 模式/輔助/起跑格");
 const voice = await page.evaluate(async () => { try { const r = await fetch("./voice/manifest.json"); const j = await r.json(); return { ok: r.ok, n: Object.keys(j).length }; } catch (e) { return { ok: false, n: 0 }; } });

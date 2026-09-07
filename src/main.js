@@ -11,6 +11,8 @@ import { loadSettings, saveSettings } from "./storage.js";
 import { primeVoice, speakLine, setVoiceEnabled } from "./voice.js";
 import { phraseFor } from "./commentary.js";
 import { loadRecords, saveRecords, applyResult, getRecord, todayStr } from "./records.js";
+import { dailyKey, dailyChallenge, dailyRecordKey, wantsDaily } from "./daily.js";
+import { ITEM_TYPES } from "./items.js";
 import { celebrate } from "./confetti.js";
 
 const $ = (id) => document.getElementById(id);
@@ -33,6 +35,7 @@ const ui = {
   difficultySelect: $("difficultySelect"), assistSelect: $("assistSelect"), gridSelect: $("gridSelect"), colorSelect: $("colorSelect"), audioSelect: $("audioSelect"),
   colorLabel: $("colorLabel"), startButton: $("startButton"),
   vehicleSelect: $("vehicleSelect"), vehicle2Select: $("vehicle2Select"), vehicle2Label: $("vehicle2Label"), vehicleHint: $("vehicleHint"), turboLabel: $("turboLabel"), turboLabel2: $("turboLabel2"),
+  itemsSelect: $("itemsSelect"), starText: $("starText"), starText2: $("starText2"), dailyButton: $("dailyButton"), dailyHint: $("dailyHint"), dailyBadge: $("dailyBadge"),
   pauseButton: $("pauseButton"), pauseOverlay: $("pauseOverlay"), pauseResumeButton: $("pauseResumeButton"), pauseMenuButton: $("pauseMenuButton"),
   recordText: $("recordText"), homeRecord: $("homeRecord"), recText: $("recText"), recText2: $("recText2"),
 };
@@ -50,6 +53,7 @@ const settings = {
   colorIdx: Number.isInteger(saved.colorIdx) && saved.colorIdx >= 0 && saved.colorIdx < CAR_COLORS.length ? saved.colorIdx : 0,
   vehicle: VEHICLES[saved.vehicle] ? saved.vehicle : "car",
   vehicle2: VEHICLES[saved.vehicle2] ? saved.vehicle2 : "car",
+  items: saved.items !== false,
 };
 let audioEnabled = saved.audioEnabled !== false;
 let helpSeen = saved.helpSeen === true;
@@ -78,6 +82,7 @@ const vehicleItems = VEHICLE_IDS.map((id) => ({ value: id, label: `${VEHICLES[id
 fill(ui.vehicleSelect, vehicleItems, settings.vehicle);
 fill(ui.vehicle2Select, vehicleItems, settings.vehicle2);
 ui.audioSelect.value = audioEnabled ? "on" : "off";
+ui.itemsSelect.value = settings.items ? "on" : "off";
 
 /* ── 遊戲 + 音效 + 人聲 ── */
 const audio = new AudioManager();
@@ -89,6 +94,7 @@ window.__racing3d = game;   // dev hook(Playwright 驗收)
 window.__racing3dAudio = audio;
 game.settings.colorIdx = settings.colorIdx;
 game.settings.vehicle = settings.vehicle; game.settings.vehicle2 = settings.vehicle2;
+game.settings.items = settings.items;
 game.setTrack(settings.trackId);
 game.setPlayerColor(settings.colorIdx);
 
@@ -133,6 +139,13 @@ function updateVehicleHint() {
 ui.vehicleSelect.addEventListener("change", () => { settings.vehicle = game.setVehicle(ui.vehicleSelect.value, 0); saveSettings({ vehicle: settings.vehicle }); game.setPlayerColor(settings.colorIdx); updateVehicleHint(); audio.uiTap(); });
 ui.vehicle2Select.addEventListener("change", () => { settings.vehicle2 = game.setVehicle(ui.vehicle2Select.value, 1); saveSettings({ vehicle2: settings.vehicle2 }); updateVehicleHint(); });
 ui.modeSelect.addEventListener("change", updateVehicleHint);
+ui.itemsSelect.addEventListener("change", () => {
+  settings.items = ui.itemsSelect.value === "on";
+  saveSettings({ items: settings.items });
+  game.settings.items = settings.items;
+  game.setTrack(settings.trackId); game.setPlayerColor(settings.colorIdx); buildMiniBase();   // 重建場景才會真的長出/收掉道具
+  audio.uiTap();
+});
 applyModeUi();
 updateVehicleHint();
 
@@ -196,11 +209,43 @@ ui.fsButton.addEventListener("click", () => {
 });
 window.addEventListener("pointerdown", () => enterImmersive(false), { once: true, passive: true });
 
+/* 今日挑戰(daily-puzzle-kit):日期種子決定賽道/方向/圈數/難度/對手/道具;全班同一題比時間。
+   ★ 深連結 ?daily 走的是同一支 startDaily(火花 #daily 那張卡指過來就直接開題,零點擊)。 */
+let dailyOn = false;
+function describeDaily(d) {
+  const t = TRACKS[d.trackId] || TRACKS.meadow;
+  const diff = (DIFFICULTY[d.difficulty] || DIFFICULTY.easy).label;
+  return `${t.emoji} ${t.label}・${d.laps} 圈・${diff}・${d.aiCount} 台電腦車・道具${d.items ? "開" : "關"}`;
+}
+function updateDailyHint() {
+  if (!ui.dailyHint) return;
+  const d = dailyChallenge();
+  const rec = getRecord(records, dailyRecordKey(d.key), d.laps, d.difficulty);
+  ui.dailyHint.textContent = `📅 今日挑戰(${d.key}):${describeDaily(d)}${rec.time ? `　🏆 你今天最好 ${fmtTime(rec.time)}` : "　(今天還沒跑過)"}`;
+}
+function startDaily() {
+  audio.unlock(); audio.startEngine();
+  enterImmersive(false);
+  ui.homeScreen.classList.remove("visible");
+  ui.resultOverlay.classList.remove("visible");
+  const d = game.startDaily();
+  dailyOn = true;
+  buildMiniBase();
+  raceRecord = getRecord(records, dailyRecordKey(d.key), d.laps, d.difficulty);
+  const recLine = raceRecord.lap ? `・紀錄 ${fmtTime(raceRecord.lap)}` : "";
+  ui.recText.textContent = recLine; ui.recText2.textContent = recLine;
+  if (ui.turboLabel) ui.turboLabel.textContent = `⚡ ${(VEHICLES[settings.vehicle] || VEHICLES.car).boostLabel}`;
+  flashMessage(`📅 今日挑戰:${describeDaily(d)}`);
+  if (!helpSeen) { openHelp(); helpSeen = true; saveSettings({ helpSeen: true }); }
+}
+ui.dailyButton.addEventListener("click", startDaily);
+
 function startRace() {
   audio.unlock(); audio.startEngine();
   enterImmersive(false);
   ui.homeScreen.classList.remove("visible");
   ui.resultOverlay.classList.remove("visible");
+  dailyOn = false;
   game.startRace({ ...settings });
   buildMiniBase();
   raceRecord = getRecord(records, settings.trackId, settings.laps, settings.difficulty);
@@ -212,9 +257,11 @@ function startRace() {
   if (!helpSeen) { openHelp(); helpSeen = true; saveSettings({ helpSeen: true }); }
 }
 ui.startButton.addEventListener("click", startRace);
-ui.resultAgainButton.addEventListener("click", startRace);
+ui.resultAgainButton.addEventListener("click", () => (dailyOn ? startDaily() : startRace()));   // 今日題按「再來一場」= 再挑戰同一題
 const toMenu = () => {
   game.setPaused(false);
+  dailyOn = false;
+  updateDailyHint();
   ui.resultOverlay.classList.remove("visible");
   ui.helpOverlay.classList.remove("visible");
   ui.homeScreen.classList.add("visible");
@@ -393,6 +440,8 @@ game.onHud = (hud) => {
     ui.lapTimeText.textContent = fmtTime(hud.lapT);
     ui.bestText.textContent = fmtTime(hud.bestLap);
     ui.speedText.textContent = String(hud.speedKmh);
+    if (ui.starText) { ui.starText.textContent = hud.itemsOn ? `⭐ ${hud.stars}` : ""; ui.starText.classList.toggle("oiled", !!hud.oiled); }
+    if (ui.dailyBadge) ui.dailyBadge.hidden = !hud.dailyKey;
     ui.turboFill.style.transform = `scaleX(${Math.max(0, Math.min(1, hud.turbo)).toFixed(3)})`;
     ui.turboRow.classList.toggle("tired", !!hud.tired);
     ui.turboRow.classList.toggle("boosting", !!hud.boosting);
@@ -407,6 +456,7 @@ game.onHud = (hud) => {
       ui.lapTimeText2.textContent = fmtTime(q.lapT);
       ui.bestText2.textContent = fmtTime(q.bestLap);
       ui.speedText2.textContent = String(q.speedKmh);
+      if (ui.starText2) { ui.starText2.textContent = hud.itemsOn ? `⭐ ${q.stars}` : ""; ui.starText2.classList.toggle("oiled", !!q.oiled); }
       ui.turboFill2.style.transform = `scaleX(${Math.max(0, Math.min(1, q.turbo)).toFixed(3)})`;
       ui.turboRow2.classList.toggle("tired", !!q.tired);
       ui.turboRow2.classList.toggle("boosting", !!q.boosting);
@@ -444,6 +494,7 @@ game.onEvent = (type, d) => {
     case "rescue": audio.rescue(); break;
     case "playerfinish": audio.lap(true); break;
     case "pause": case "resume": audio.uiTap(); break;
+    case "item": if (d.type === "boost") audio.itemBoost(); else if (d.type === "star") audio.itemStar(); else audio.itemOil(); break;
     case "finish": showResults(d); audio.finish(d.mode === "duel2p" ? 1 : d.rank); sendDone(); break;
     default: break;
   }
@@ -458,10 +509,11 @@ function showResults(r) {
     : `總時間 ${fmtTime(r.time)}・最佳單圈 ${fmtTime(r.bestLap)}`;
   // 本機最佳紀錄(v3):每位人類車手各套一次;第一次跑這條賽道只「記下」不慶祝;破紀錄才有 🏆 與人聲
   const humans = two ? [{ tag: "P1 ", time: r.time, lap: r.bestLap }, { tag: "P2 ", time: r.time2, lap: r.bestLap2 }] : [{ tag: "", time: r.time, lap: r.bestLap }];
+  const recTrackId = r.dailyKey ? dailyRecordKey(r.dailyKey) : r.trackId;   // 今日題另記一格,不跟一般紀錄混
   const lines = [];
   let broke = false;
   for (const h of humans) {
-    const res = applyResult(records, { trackId: r.trackId, laps: r.laps, difficulty: r.difficultyId, time: h.time, bestLap: h.lap, date: todayStr() });
+    const res = applyResult(records, { trackId: recTrackId, laps: r.laps, difficulty: r.difficultyId, time: h.time, bestLap: h.lap, date: todayStr() });
     records = res.records;
     if (res.newTime && res.prevTime) lines.push(`${h.tag}🏆 新紀錄!總時間 ${fmtTime(h.time)}(之前 ${fmtTime(res.prevTime)})`);
     else if (res.newTime) lines.push(`${h.tag}第一次跑這條賽道,記下紀錄 ${fmtTime(h.time)}`);
@@ -470,6 +522,9 @@ function showResults(r) {
   }
   saveRecords(records);
   updateHomeRecord();
+  updateDailyHint();
+  if (r.items) lines.push(two ? `P1 ⭐${r.stars}・P2 ⭐${r.stars2}` : `⭐ 撿到 ${r.stars} 顆星星`);
+  ui.resultEyebrow.textContent = (r.dailyKey ? `📅 今日挑戰 ${r.dailyKey}・` : "") + ui.resultEyebrow.textContent;
   ui.recordText.textContent = lines.join("　");
   if (broke) setTimeout(() => speakLine(phraseFor("newrecord")), 2600);   // 等衝線那句唸完
   // 彩帶(win-confetti):單人前三名 / 雙人有人贏 ⇒ 結算卡出現時從上灑落;reduced-motion 自動 no-op
@@ -481,7 +536,7 @@ function showResults(r) {
     const tr = document.createElement("tr");
     if (row.isPlayer) tr.className = "me";
     const color = "#" + row.colorHex.toString(16).padStart(6, "0");
-    tr.innerHTML = `<td>${row.rank}</td><td><span class="dot" style="background:${color}"></span>${row.vehicleEmoji || ""} ${row.name}</td><td>${row.time != null ? fmtTime(row.time) : "還在跑"}</td><td>${row.bestLap ? "單圈 " + fmtTime(row.bestLap) : ""}</td>`;
+    tr.innerHTML = `<td>${row.rank}</td><td><span class="dot" style="background:${color}"></span>${row.vehicleEmoji || ""} ${row.name}${r.items && row.stars ? ` <small>⭐${row.stars}</small>` : ""}</td><td>${row.time != null ? fmtTime(row.time) : "還在跑"}</td><td>${row.bestLap ? "單圈 " + fmtTime(row.bestLap) : ""}</td>`;
     ui.resultTable.appendChild(tr);
   }
   setTimeout(() => ui.resultOverlay.classList.add("visible"), 1200);   // 先看 1.2 秒繞場,再出結算卡
@@ -518,6 +573,11 @@ game.update = (dt) => {
   if (p) audio.setEngine(active ? (Math.abs(p.speed) / cfg.maxSpeed) : 0.1, active ? game.input.throttle : 0, !!p.boosting, Math.min(1, Math.abs(p.lat) / 6), active, (VEHICLES[p.vehicle] || VEHICLES.car).sound);
 };
 game.start();
+updateDailyHint();
+
+/* 📅 ?daily 深連結(火花「今日挑戰」卡直達):不經任何點擊,開場就是今天那一題。
+   ★ 走 setTimeout 0 讓 UI 先接線完;audio.unlock 沒有手勢也有 catch,不會炸。 */
+if (wantsDaily(location.search)) setTimeout(() => { try { startDaily(); } catch { /* ignore */ } }, 0);
 
 /* PWA:SW 只在線上註冊(dev 會慢一版) */
 if ("serviceWorker" in navigator && !isLocal) {

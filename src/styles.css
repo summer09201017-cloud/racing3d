@@ -128,6 +128,12 @@ button { font-family: inherit; }
 .result-table tr.me td { background: rgba(255, 210, 74, 0.14); font-weight: 800; }
 .result-table .dot { display: inline-block; width: 12px; height: 12px; border-radius: 50%; margin-right: 8px; vertical-align: middle; border: 1px solid rgba(255,255,255,0.4); }
 .result-card h2 { font-size: 30px; }
+.star-line { font-size: 17px; font-weight: 800; color: #ffd24a; display: flex; align-items: center; gap: 8px; min-height: 0; }
+.star-line .oiled { color: #b0a8ff; }
+.daily-badge { font-size: 12px; font-weight: 700; color: #7de08c; border: 1px solid rgba(125,224,140,.5); border-radius: 999px; padding: 1px 8px; }
+.daily-button { width: 100%; min-height: 46px; margin-top: 10px; border: 1px solid rgba(125,224,140,.55); border-radius: 14px; cursor: pointer;
+  background: rgba(125, 224, 140, 0.14); color: #d9ffe2; font-size: 16px; font-weight: 800; }
+.daily-button:hover { background: rgba(125, 224, 140, 0.24); }
 .record-text { margin-top: 6px; color: #ffd24a; font-weight: 700; font-size: 15px; line-height: 1.6; min-height: 1.2em; }
 .pause-card h2 { font-size: 30px; }
 .pause-card p { font-size: 16px; }
