@@ -28,21 +28,27 @@ racing3d 交接 — 2026-09-07(v3:暫停 / 方向變體 / 紀錄 / 完美起跑 
 
 - 版控與部署:
   · GitHub https://github.com/summer09201017-cloud/racing3d(main)
-  · Netlify https://new-hfpc-racing3d.netlify.app
-    site id 4d240b0c-e780-4962-bf85-30779e678b64,direct upload、未接 GitHub build
+  · 線上 ★★ 2026-09-07 已搬 Cloudflare Workers ★★ https://hfpc-racing3d.summer09201017.workers.dev
     ⇒ ★ git push 不會上線,改完一定要重跑:
-      npm test && npm run build && netlify deploy --prod --dir dist --site <id> --no-build
+      npm test && npm run build && npx wrangler deploy --name hfpc-racing3d --assets dist --compatibility-date 2026-07-01
+      → CHECK_URL=https://hfpc-racing3d.summer09201017.workers.dev node scripts/browser-check.mjs
+    ⚠ 舊 Netlify site 4d240b0c-e780-4962-bf85-30779e678b64 現在是 **301 轉址殼**,別再往它 deploy 遊戲
+      (會蓋掉轉址、變成兩份會分岔的內容)。轉址殼三個檔的內容在 CLAUDE.md 部署段。
   · sw CACHE = racing3d-v4;verTag v4(含 v3、v2、v1 簡歷)
-  · 為什麼在 Netlify 不在 CF:Cloudflare 帳號 0903 起 ToS 審查凍結;0904 使用者拍板
-    「凍結期間純靜態新站先上 Netlify、站名加 new- 前綴」。審查解除後搬 CF Pages(hfpc-racing3d)。
-  · 帳本四處 0906 已登記(奧運頁卡 / 作品集 / play-stats NAMES / sites.json 兩份);v3 不需再登(網址與統計鍵不變)。
+  · 平台沿革:0905 建站時 CF 帳號 ToS 審查中,依 0904 拍板先上 Netlify(new- 前綴)⇒ v1~v4 都在 Netlify;
+    0907 查清「被擋的只有建新 Pages 專案(帳號層級),建新 Worker 名沒擋」⇒ 使用者拍板搬 Workers,當天完成。
+    趁 0907 搬的理由:換 origin 會讓玩家本機最佳紀錄歸零,而當時統計 2 開 1 完全是驗收場、還沒孩子玩過,代價等於零。
+  · 帳本(0907 搬站後):實際帶網址的只有三處,都已改 workers.dev 並線上驗過 —— 奧運頁卡(改完要 wrangler deploy)、
+    作品集 data.js(同)、skills repo 的 sites.json。play-stats NAMES 只有中文名沒網址、
+    Downloads/hfpc/... 那份 sites.json 是舊快照夾(停在 v156),兩者都不用改。
 
 ★ 待使用者拍板(別動工)
 - **A 級下一件當 v5 主菜**(roadmap.md 待做表):建議先讓真孩子玩 10 分鐘再挑——單調 ⇒ 道具層;想再來 ⇒ 今日挑戰 ?daily(便宜一半)。
   統計 0907 早只有 2 次開啟、1 次完賽,都是驗收場,**還沒有孩子玩過**。
 - 載具第二批(🏃 跑步 / 🛸 懸浮車)要不要做:骨架已在,各 2.5~3 時;建議等現有三型有真人回饋再決定。
 - ~~載具首批哪兩型 / 混搭與否~~ ✅ 0907 使用者拍板「摩托車+馬、同場混搭」⇒ v4 已完工上線。
-- **要不要搬到 CF Workers?**(不急,見 roadmap C 級)
+- ~~要不要搬到 CF Workers?~~ ✅ **0907 使用者拍板「搬,而且趁現在」,當天完成**(見上方「線上」與 CLAUDE.md 部署段)。
+  以下留著當紀錄:
   · 能搬:CF 只擋「建新 **Pages** 專案」(code 8000030,帳號層級——四個不相關名字全被拒),**Worker 名沒擋**;0907 兩場 session 各自實測建過再刪。指令 `wrangler deploy --name hfpc-racing3d --assets dist`。
   · **但沒有非搬不可的理由**:0907 實查本站 `netlify.toml` 已有 `ignore = "exit 0"`、site 的 `build_settings.repo_url` = undefined(從沒接過 GitHub build)⇒ **不會被 Netlify 自動重 build 燒點數**。
   · 代價:帳本四處網址要改、origin 變 ⇒ PWA 重裝 + **玩家本機最佳紀錄歸零**(現在還沒孩子玩過,要搬是趁現在最便宜)、舊站留 301。

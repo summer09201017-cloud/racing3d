@@ -89,14 +89,23 @@ Three.js 街機賽車:自由移動的車體 + 閉環樣條賽道(3 基底 × 4 �
 
 ## 部署
 
-**2026-09-06 v2 上線 Netlify(direct upload,未接 GitHub auto-build)**:<https://new-hfpc-racing3d.netlify.app>
-site id `4d240b0c-e780-4962-bf85-30779e678b64`;源碼 GitHub `summer09201017-cloud/racing3d`(main)。
+**2026-09-07 起:Cloudflare Workers assets** — <https://hfpc-racing3d.summer09201017.workers.dev>
+源碼 GitHub `summer09201017-cloud/racing3d`(main)。
 
-- **為什麼不是 CF**:Cloudflare 帳號 2026-09-03 起 ToS 審查,0904 使用者拍板「凍結期間純靜態新站先上 Netlify、站名加 `new-` 前綴」。
-  ⚠ **0907 事實更新**(兩場 session 各自實測,見 skill `manual-deploy-map` 檔頭):被擋的**只有「建新 Pages 專案」**(code 8000030;拿四個不相關名字試全被拒 ⇒ **帳號層級**,不是名字被封),**建新 Worker 名沒被擋** ⇒ 真要搬走 `wrangler deploy --name hfpc-racing3d --assets dist`,不必等申訴。
-  ★ **但本站不急著搬**:`netlify.toml` 已有 `ignore = "exit 0"`、site `build_settings.repo_url` = undefined(**從沒接過 GitHub build**)⇒ 不會被自動重 build 燒點數。換 origin 會讓玩家的本機最佳紀錄歸零 ⇒ 要使用者拍板。見 `roadmap.md` C 級那條。
-- **更新流程(★ git push 不會上線,一定要重跑 deploy)**:
-  `npm test && npm run build && netlify deploy --prod --dir dist --site 4d240b0c-e780-4962-bf85-30779e678b64 --no-build`
-  → `CHECK_URL=https://new-hfpc-racing3d.netlify.app node scripts/browser-check.mjs`。殼層(index.html / sw.js / manifest / voice)有改就 bump sw `CACHE`(目前 `racing3d-v4`)。
-- psPing id `racing3d`(index.html)、`racing3d-done` / `racing3d-dwell`(main.js)——beacon 只排除 localhost、不認 hostname,Netlify 上照常打;verTag 在 `index.html #verTag`。
-- **帳本四處 2026-09-06 已登記**(由 0905-bb 場完成並逐站驗過):奧運頁卡(`Desktop/hfpc-olympics`,dca2e9c)、作品集(7c0fcad)、play-stats NAMES+versions(87ec829)、sites.json 兩份。搬 CF 時這四處的網址要一起改。
+★★ **部署指令換了,別再跑 netlify deploy** ★★
+```
+npm test && npm run build && npx wrangler deploy --name hfpc-racing3d --assets dist --compatibility-date 2026-07-01
+→ CHECK_URL=https://hfpc-racing3d.summer09201017.workers.dev node scripts/browser-check.mjs
+```
+舊 Netlify site `4d240b0c-e780-4962-bf85-30779e678b64` **現在是 301 轉址殼**(`_redirects` 一行 + 說明頁);
+往它 deploy 會把轉址殼蓋掉、變成兩份會分岔的內容。轉址殼源碼沒進版控(三個檔,要重建看本段末)。
+
+- **搬遷沿革**:0905 建站時 CF 帳號 0903 起 ToS 審查,0904 使用者拍板「凍結期間純靜態新站先上 Netlify、站名加 `new-` 前綴」⇒ v1~v4 都在 Netlify。**0907 使用者拍板搬 CF Workers**(見下)。
+  ⚠ **為什麼是 Workers 不是 Pages**:CF 帳號被擋的**只有「建新 Pages 專案」**(code 8000030;四個不相關名字全被拒 ⇒ **帳號層級**,不是某個名字被封),**建新 Worker 名沒被擋**(0907 三次獨立實測 + 憫安站真的上線)⇒ 走 Workers assets,不必等申訴。想要 `pages.dev` 網址才要等桌面 `Cloudflare申訴信-2026-09-03.txt` 寄出並通過。
+  ★ **為什麼趁 0907 搬**:換 origin 會讓玩家的**本機最佳紀錄(localStorage)歸零**——0907 統計是 2 開 1 完、全是驗收場,**還沒有孩子玩過**,所以這個代價當下等於零;一旦主日學用過就再也回不到這個價格。
+  ★ **舊 Netlify 站的 301 殼**(源碼不在版控,三個檔,要重建時照抄):`_redirects` = `/*  https://hfpc-racing3d.summer09201017.workers.dev/:splat  301!`、`netlify.toml` = `[build] ignore = "exit 0"`、一頁 `index.html`(meta refresh + canonical + 一行「請把書籤改成新網址」)。部署:`npx netlify deploy --prod --dir . --site 4d240b0c-e780-4962-bf85-30779e678b64 --no-build`。
+- **更新流程(★ git push 不會上線,一定要重跑 deploy)**:見本段開頭的 wrangler 指令。殼層(index.html / sw.js / manifest / voice)有改就 bump sw `CACHE`(目前 `racing3d-v4`)。
+  ⚠ `--assets dist` 只上傳 build 產物 27 檔(源碼/設定/測試/文件都不在裡面,0907 逐條 curl 驗過全 404)⇒ **不需要 `.assetsignore`**(那只有 `--assets .` 才要)。
+- psPing id `racing3d`(index.html)、`racing3d-done` / `racing3d-dwell`(main.js)——beacon 只排除 localhost、不認 hostname,**換平台不用改、統計不斷線**;verTag 在 `index.html #verTag`。
+- **帳本(0907 搬站後現況)**:實際帶網址的只有**三處**,0907 都已改成 workers.dev 並線上驗過:①奧運頁卡 `Desktop/hfpc-olympics/index.html`(改完要 `wrangler deploy --name hfpc-olympics --assets .`)②作品集 `hfpc-portfolio/data.js`(同樣 wrangler)③`hfpc-claude-skills` 的 `references/machine-env-0714/gamefleet/sites.json`。
+  ⚠ 另外兩個「看起來要改其實不用」:play-stats 的 `worker.js` NAMES 只有中文名**沒有網址**;`Downloads/hfpc/hfpc-claude-skills` 那份 sites.json 是**舊快照夾**(停在 v156),不是活正本,別去改它。

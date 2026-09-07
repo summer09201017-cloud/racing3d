@@ -15,8 +15,8 @@ V 鍵或「視角」鈕循環,數字鍵 1~5 直跳,選擇會記住。
 
 ## 線上
 
-<https://new-hfpc-racing3d.netlify.app>
-(Netlify direct upload;Cloudflare 帳號審查解除後搬 CF Pages,見 `CLAUDE.md`「部署」)
+<https://hfpc-racing3d.summer09201017.workers.dev>
+(2026-09-07 起 Cloudflare Workers assets;舊網址 `new-hfpc-racing3d.netlify.app` 已改成 301 轉址殼,見 `CLAUDE.md`「部署」)
 
 ## 玩
 

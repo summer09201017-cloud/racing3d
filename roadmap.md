@@ -34,6 +34,11 @@
 - 電腦車**三種混搭**(每場排列不同);雙人 P1/P2 各選各的;駕駛座各有眼位(摩托車握把+儀表、馬頭與韁繩);音色三種(引擎 / 高轉 / 馬蹄);摩托車轉彎**內傾壓車**、馬有奔跑循環。
 - 新檔 `src/vehicles.js`(資料層)+ `src/rigs.js`(外型);`stepCar` 改讀 `car.params`(賽車逐鍵 == CAR ⇒ 舊測試不變);碰撞改用各自車寬。npm test 1255→**1434**、browser-check 68→**78**。
 
+**🚚 平台搬遷(2026-09-07,使用者拍板「搬,而且趁現在」)**
+- Netlify → **Cloudflare Workers assets**:<https://hfpc-racing3d.summer09201017.workers.dev>(`wrangler deploy --name hfpc-racing3d --assets dist`)。
+- 為什麼是 Workers:CF 只擋「建新 **Pages** 專案」(帳號層級 code 8000030),Worker 名沒擋。為什麼趁現在:換 origin 會讓玩家本機最佳紀錄歸零,而當時還沒有孩子玩過 ⇒ 代價等於零。
+- 帳本三處已改並線上驗(奧運頁卡 / 作品集 data.js / skills sites.json);舊 Netlify 站已改成 **301 轉址殼**;新站線上 browser-check **78/78**、洩漏檢查 12 條全 404。
+
 ## 🔜 待做(按 CP 值 × 時間排序;A 級等真孩子玩過 10 分鐘再挑)
 
 | 級 | 項目 | ⏱ | ★ | 說明 |
@@ -55,10 +60,6 @@
 | B | 跳台飛越 | 4 時 | ★☆☆ | 車高度要從賽道解耦,77 項車體測試跟著動,風險中 |
 | B | 背景音樂 | 1.5 時 | ★☆☆ | 引擎聲 + 播報已滿,建議先不做 |
 | C | 賽道編輯器 | 1 天+ | ★☆☆ | 老師會不會用是問號,先看統計 |
-| C | **搬到 CF Workers**(`hfpc-racing3d.summer09201017.workers.dev`) | 30 分 | ★☆☆ **待拍板・不急** | **技術上現在就能搬**:CF 帳號被擋的只有「建新 **Pages** 專案」(code 8000030,四個不相關名字全被拒 ⇒ 帳號層級),**建新 Worker 名沒被擋**——0907 兩場 session 各自獨立實測建過再刪(見 skill `manual-deploy-map` 檔頭)⇒ `wrangler deploy --name hfpc-racing3d --assets dist`。
-**但本站沒有非搬不可的理由**:0907 實查 racing3d 的 `netlify.toml` 已有 `[build] ignore = "exit 0"`,site `build_settings.repo_url` 是 undefined(**從沒接過 GitHub build**)⇒ **不會被自動重 build 燒點數**(那個坑是七月全艦隊遷 CF 的原因,對本站不成立)。
-真要搬的理由只有「少一個平台、統一在 CF」。**代價**:帳本四處網址要改(奧運頁卡 / 作品集 / play-stats NAMES / sites.json 兩份)、`?g=racing3d` 統計鍵不變但 **origin 變** ⇒ 已裝 PWA 要重裝、**玩家本機最佳紀錄歸零**(現在還沒有孩子玩過,所以要搬是趁現在最便宜)、舊站留 301 一個月。
-⏳ 若堅持要 `pages.dev` 網址,就得等桌面 `Cloudflare申訴信-2026-09-03.txt` 寄出並通過(**該信 0907 仍是草稿,方括號未填**)。 |
 
 ## 🚫 刻意不做
 
