@@ -810,6 +810,7 @@ export class RacingGame {
       const own = !!this.cams[car.playerIdx] && this.cams[car.playerIdx].view === "cockpit" && this.phase !== "menu";
       const hide = viewportIdx < 0 ? own : (own && viewportIdx === car.playerIdx);
       for (const m of rig.hide) m.visible = !hide;
+      if (rig.cockpit) rig.cockpit.visible = !!hide;   // 內裝只在駕駛座視角(見 _syncRig 同段註解);!! 不可省
     }
   }
 
@@ -1026,6 +1027,9 @@ export class RacingGame {
     // 駕駛座視角:藏車艙/窗/駕駛頭(只對人類車、且他自己的視窗選駕駛座);其他車照常。雙人渲染時 render() 每一刀再覆寫。
     const cockpitNow = car.isPlayer && this.phase !== "menu" && !!this.cams[car.playerIdx] && this.cams[car.playerIdx].view === "cockpit";
     for (const m of rig.hide) m.visible = !cockpitNow;
+    // ★ 第一人稱內裝(儀表板/方向盤/速度錶)只該在駕駛座視角看得到。
+    //   漏掉這行,跑步那顆速度錶就會浮在人的胸前,追尾視角一眼看到(0908 使用者在 city3d 實玩回報,這裡是同源程式碼)。
+    if (rig.cockpit) rig.cockpit.visible = !!cockpitNow;   // !! 不可省:cockpitNow 以 car.isPlayer 開頭,undefined 不是 false,three 會照畫
   }
 
   /** 道具視覺:玩家(P1)撿走的先藏起來、過線再出現;星星緩轉。visible 一律嚴格 boolean。 */

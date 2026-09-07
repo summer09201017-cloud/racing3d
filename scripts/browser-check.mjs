@@ -417,6 +417,54 @@ ok(driftUi.hasDriftEvent, "車體帶甩尾累積欄位");
 ok(/甩尾/.test(driftUi.help) && /加速|渦輪/.test(driftUi.help), "玩法說明講了甩尾會送加速");
 await page.evaluate(() => { window.__racing3d.autopilot = true; });
 
+// ★ 0908 人物三鐵則(使用者在同源的 city3d 實玩點名:沒脖子 / 後腦沒頭髮 / 追尾視角看得到速度錶)
+// 先把場面換成「玩家騎摩托車 + 3 台混搭電腦車」,才有騎士可以驗
+await page.click("#menuButton");
+await page.waitForTimeout(400);
+await page.selectOption("#aiVehicleSelect", "mix");
+await page.selectOption("#vehicleSelect", "moto");
+await page.selectOption("#aiSelect", "3");
+await page.waitForTimeout(300);
+await page.click("#startButton");
+await page.waitForTimeout(600);
+if (await page.isVisible("#helpOverlay.visible")) await page.click("#helpCloseButton");
+
+// ★ 遍歷場上**所有**車的 rig(玩家 + 電腦車混搭),依外型分類驗。
+//   ⚠ 不能只驗玩家:玩家預設開賽車,而賽車駕駛的頭是 game.js 內嵌的、不走 makeRiderHead ⇒ 驗它會白紅一場。
+const figures = await page.evaluate(() => {
+  const g = window.__racing3d;
+  const out = [];
+  for (const [car, rig] of g.rigs) {
+    let neck = 0, nape = 0;
+    rig.group.traverse((o) => { if (o.userData && o.userData.neck) neck++; if (o.userData && o.userData.napeGuard) nape++; });
+    out.push({ kind: rig.kind, neck, nape, isPlayer: !!car.isPlayer });
+  }
+  return out;
+});
+const RIDERS = ["moto", "horse", "run", "hover"];   // 這四型會露出騎士(賽車的駕駛在車艙裡,另一套)
+const riders = figures.filter((f) => RIDERS.includes(f.kind));
+ok(riders.length > 0, `場上有 ${riders.length} 個露出騎士的載具可以驗(共 ${figures.length} 台:${figures.map((f) => f.kind).join("/")})`);
+for (const f of riders) {
+  ok(f.neck >= 1, `${f.kind} 的騎士有脖子(找到 ${f.neck} 段)`);
+  ok(f.nape >= 1, `${f.kind} 的騎士後腦有安全帽護片(找到 ${f.nape} 片)`);
+}
+const ck = await page.evaluate(() => {
+  const g = window.__racing3d;
+  const rig = g.rigs.get(g.player);
+  const cam = g.cams[g.player.playerIdx];
+  if (!rig || !rig.cockpit || !cam) return { hasCockpit: false };
+  const was = cam.view;
+  cam.view = "chase"; g.update(1 / 60);
+  const shownInChase = rig.cockpit.visible;
+  cam.view = "cockpit"; g.update(1 / 60);
+  const shownInFirstPerson = rig.cockpit.visible;
+  cam.view = was; g.update(1 / 60);
+  return { hasCockpit: true, shownInChase, shownInFirstPerson };
+});
+ok(!ck.hasCockpit || ck.shownInChase === false, "追尾視角看不到第一人稱內裝(速度錶/儀表板)");
+// 反面也要驗:只驗「藏起來」的話,把內裝整段刪掉也會全綠
+ok(!ck.hasCockpit || ck.shownInFirstPerson === true, "駕駛座視角看得到內裝(沒有被一起藏掉)");
+
 ok(errors.length === 0, `0 pageerror(${errors.length})`);
 for (const e of errors) console.log("   ", e);
 await browser.close();
