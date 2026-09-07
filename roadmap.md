@@ -55,7 +55,10 @@
 | B | 跳台飛越 | 4 時 | ★☆☆ | 車高度要從賽道解耦,77 項車體測試跟著動,風險中 |
 | B | 背景音樂 | 1.5 時 | ★☆☆ | 引擎聲 + 播報已滿,建議先不做 |
 | C | 賽道編輯器 | 1 天+ | ★☆☆ | 老師會不會用是問號,先看統計 |
-| C | **搬離 Netlify 到 Cloudflare** | 30 分 | ★★☆ **待拍板** | ⚠ 0907 事實更新(0907-全艦隊健檢報告 場實測):CF 帳號**只有「建新 Pages 專案」被擋**(code 8000030),**建新 Worker 名沒被擋** ⇒ 走 `wrangler deploy --name hfpc-racing3d --assets dist` **現在就能搬,不必等申訴**。要搬的理由=Netlify 自動重 build 燒點數。**代價**:①帳本四處網址要一起改(奧運頁卡 / 作品集 / play-stats NAMES / sites.json 兩份)②`?g=racing3d` 統計鍵不變但 **origin 變** ⇒ 已裝的 PWA 要重裝、**本機最佳紀錄(localStorage)歸零**③舊 Netlify 站要留 301 一個月。⇒ **等使用者拍板再動** |
+| C | **搬到 CF Workers**(`hfpc-racing3d.summer09201017.workers.dev`) | 30 分 | ★☆☆ **待拍板・不急** | **技術上現在就能搬**:CF 帳號被擋的只有「建新 **Pages** 專案」(code 8000030,四個不相關名字全被拒 ⇒ 帳號層級),**建新 Worker 名沒被擋**——0907 兩場 session 各自獨立實測建過再刪(見 skill `manual-deploy-map` 檔頭)⇒ `wrangler deploy --name hfpc-racing3d --assets dist`。
+**但本站沒有非搬不可的理由**:0907 實查 racing3d 的 `netlify.toml` 已有 `[build] ignore = "exit 0"`,site `build_settings.repo_url` 是 undefined(**從沒接過 GitHub build**)⇒ **不會被自動重 build 燒點數**(那個坑是七月全艦隊遷 CF 的原因,對本站不成立)。
+真要搬的理由只有「少一個平台、統一在 CF」。**代價**:帳本四處網址要改(奧運頁卡 / 作品集 / play-stats NAMES / sites.json 兩份)、`?g=racing3d` 統計鍵不變但 **origin 變** ⇒ 已裝 PWA 要重裝、**玩家本機最佳紀錄歸零**(現在還沒有孩子玩過,所以要搬是趁現在最便宜)、舊站留 301 一個月。
+⏳ 若堅持要 `pages.dev` 網址,就得等桌面 `Cloudflare申訴信-2026-09-03.txt` 寄出並通過(**該信 0907 仍是草稿,方括號未填**)。 |
 
 ## 🚫 刻意不做
 

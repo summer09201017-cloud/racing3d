@@ -42,8 +42,12 @@ racing3d 交接 — 2026-09-07(v3:暫停 / 方向變體 / 紀錄 / 完美起跑 
   統計 0907 早只有 2 次開啟、1 次完賽,都是驗收場,**還沒有孩子玩過**。
 - 載具第二批(🏃 跑步 / 🛸 懸浮車)要不要做:骨架已在,各 2.5~3 時;建議等現有三型有真人回饋再決定。
 - ~~載具首批哪兩型 / 混搭與否~~ ✅ 0907 使用者拍板「摩托車+馬、同場混搭」⇒ v4 已完工上線。
-- **要不要搬離 Netlify 到 CF Workers?**(0907 事實更新:CF 只有「建新 Pages 專案」被擋 code 8000030,**建新 Worker 名沒被擋**——0907-全艦隊健檢報告 場實測過 ⇒ `wrangler deploy --name hfpc-racing3d --assets dist` 現在就能搬,不必等申訴)。
-  搬的理由=Netlify 自動重 build 燒點數;代價=帳本四處網址要改、origin 變 ⇒ 已裝 PWA 要重裝、**玩家的本機最佳紀錄會歸零**、舊站要留 301 一個月。**沒拍板前不要動。**
+- **要不要搬到 CF Workers?**(不急,見 roadmap C 級)
+  · 能搬:CF 只擋「建新 **Pages** 專案」(code 8000030,帳號層級——四個不相關名字全被拒),**Worker 名沒擋**;0907 兩場 session 各自實測建過再刪。指令 `wrangler deploy --name hfpc-racing3d --assets dist`。
+  · **但沒有非搬不可的理由**:0907 實查本站 `netlify.toml` 已有 `ignore = "exit 0"`、site 的 `build_settings.repo_url` = undefined(從沒接過 GitHub build)⇒ **不會被 Netlify 自動重 build 燒點數**。
+  · 代價:帳本四處網址要改、origin 變 ⇒ PWA 重裝 + **玩家本機最佳紀錄歸零**(現在還沒孩子玩過,要搬是趁現在最便宜)、舊站留 301。
+  · 想要 `pages.dev` 網址則要等申訴;桌面那封 `Cloudflare申訴信-2026-09-03.txt` **0907 仍是草稿(方括號未填)**。
+  **沒拍板前不要動。**
 
 ★ 載具(v4 已完工;第二批方案留著)
 - 骨架:載具 = 「參數包 + 3D rig + 音色 + 駕駛座殼」四件,物理仍是同一支 stepCar。
