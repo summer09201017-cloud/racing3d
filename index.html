@@ -39,7 +39,7 @@
       <div class="speed-panel" id="speedPanel" hidden>
         <div class="speed-num"><span id="speedText">0</span><small>km/h</small></div>
         <div class="turbo-row" id="turboRow">
-          <span class="turbo-label">⚡ 渦輪</span>
+          <span class="turbo-label" id="turboLabel">⚡ 渦輪</span>
           <div class="turbo-track"><div class="turbo-fill" id="turboFill"></div></div>
         </div>
         <div class="speed-hint" id="speedHint">↑ 油門・↓ 煞車・← → 轉向・Shift 渦輪・V 視角・R 回賽道</div>
@@ -47,7 +47,7 @@
       <div class="speed-panel p2" id="speedPanel2" hidden>
         <div class="speed-num"><span id="speedText2">0</span><small>km/h</small></div>
         <div class="turbo-row" id="turboRow2">
-          <span class="turbo-label">⚡ 渦輪</span>
+          <span class="turbo-label" id="turboLabel2">⚡ 渦輪</span>
           <div class="turbo-track"><div class="turbo-fill" id="turboFill2"></div></div>
         </div>
         <div class="speed-hint" id="speedHint2">↑ 油門・↓ 煞車・← → 轉向・右Shift 渦輪・0 視角・Backspace 回賽道</div>
@@ -106,6 +106,7 @@
             <div>📷 <b>視角</b>:<b>V</b> 或「視角」鈕循環五檔:<b>追尾跟隨 → 車頭 → 駕駛座(第一人稱,方向盤會跟著轉、儀表指針跟著速度)→ 高空俯瞰 → 轉播機位</b>。數字鍵 <b>1~5</b> 直接跳。選擇會記住(P2 用 0 循環)。</div>
             <div>🤖 <b>AI 輕扶回中</b>(選單「輔助」):快貼到路邊時 AI 會輕輕把車拉回路中間,你自己在打方向它就少介入。<b>任何難度都能開</b>,職業檔也可以;「自動」=幼兒/兒童/入門才開。</div>
             <div>🏁 <b>比賽</b>:倒數 3、2、1、GO!跑完設定的圈數就完賽,名次看誰先過終點線。地上<b>黃底黑箭頭</b>=前面有急彎,先煞車再轉。「起跑格」可以選排最後(從後面往前超車最好玩)或最前排。</div>
+            <div>🏍️ <b>載具</b>(選單「載具」):🏎️ 賽車均衡;🏍️ 摩托車轉得快、車身窄好鑽、起步快,但抓地差會滑、草地更慢;🐎 馬在草地不減速(可以切內側)、抓地好,但起步慢、衝刺體力耗得快。電腦車三種混搭。<b>極速由難度決定,載具只換手感</b>。雙人時 P2 可以選自己的載具。</div>
             <div>⚡ <b>完美起跑</b>:倒數到「1」或「GO」的時候才踩油門,會送你一段免費渦輪!從「3」就一直按住不算(也不會罰)。電腦車也會,職業檔大約一半的車會用。</div>
             <div>⏸ <b>暫停</b>:比賽中按 <b>P</b>、<b>Esc</b> 或「⏸ 暫停」鈕,計時和所有車都停住;老師要講話、要換人都可以。切到別的分頁會自動暫停。</div>
             <div>🔁 <b>方向</b>:每條賽道都可以「逆走」(同一條路反方向開)、「鏡像」(左彎變右彎)或「鏡像逆走」,三條賽道變十二條。</div>
@@ -164,6 +165,12 @@
             <label>起跑格
               <select id="gridSelect"></select>
             </label>
+            <label>載具
+              <select id="vehicleSelect"></select>
+            </label>
+            <label id="vehicle2Label" hidden>P2 載具
+              <select id="vehicle2Select"></select>
+            </label>
             <label id="colorLabel">車色
               <select id="colorSelect"></select>
             </label>
@@ -175,9 +182,10 @@
             </label>
           </div>
 
-          <p class="home-hint">↑ 油門、↓ 煞車、← → 轉向、Shift 渦輪、空白鍵手煞;<b>V 切視角</b>(或數字鍵 1~5)、<b>P 暫停</b>。倒數到「1」或 GO 才踩油門=<b>完美起跑</b>送渦輪。「AI 輕扶回中」開了會輕輕把車拉回路中間,任何難度都能開;撞牆不會翻、卡住會自動放回賽道。雙人同機:P1 用 WASD、P2 用方向鍵(詳見「玩法」)。</p>
+          <p class="home-hint">↑ 油門、↓ 煞車、← → 轉向、Shift 渦輪/衝刺、空白鍵手煞;<b>V 切視角</b>(或數字鍵 1~5)、<b>P 暫停</b>。載具可選 🏎️ 賽車 / 🏍️ 摩托車 / 🐎 馬。倒數到「1」或 GO 才踩油門=<b>完美起跑</b>送渦輪。「AI 輕扶回中」開了會輕輕把車拉回路中間,任何難度都能開;撞牆不會翻、卡住會自動放回賽道。雙人同機:P1 用 WASD、P2 用方向鍵(詳見「玩法」)。</p>
+          <p class="home-hint" id="vehicleHint"></p>
           <p class="home-hint" id="homeRecord"></p>
-          <p class="home-hint ver-tag" id="verTag">版本 v3(2026-09-07)・暫停(P/Esc/⏸,切走分頁自動暫停)、每條賽道加「方向」逆走/鏡像/鏡像逆走(3 條變 12 條)、本機最佳紀錄(總時間+單圈,破紀錄有人聲)、完美起跑規則(GO 時踩油門送免費渦輪)、前三名彩帶、課堂排行房 🏆(平均時速上榜)。v2(09-06):極速提高(幼兒 86 → 職業 180 km/h)、「AI 輕扶回中」開關、起跑格可選、人聲播報、雙人同機分割畫面。v1(09-05)首發:三條賽道、五檔視角含駕駛座、AI 對手、溫柔規則。</p>
+          <p class="home-hint ver-tag" id="verTag">版本 v4(2026-09-07)・載具選擇:🏎️ 賽車 / 🏍️ 摩托車(轉快、窄、抓地差)/ 🐎 馬(草地不減速、起步慢),電腦車三種混搭,雙人各選;駕駛座視角各有眼位(摩托車握把儀表、馬頭與韁繩);馬蹄與摩托車音色。v3(09-07)・暫停(P/Esc/⏸,切走分頁自動暫停)、每條賽道加「方向」逆走/鏡像/鏡像逆走(3 條變 12 條)、本機最佳紀錄(總時間+單圈,破紀錄有人聲)、完美起跑規則(GO 時踩油門送免費渦輪)、前三名彩帶、課堂排行房 🏆(平均時速上榜)。v2(09-06):極速提高(幼兒 86 → 職業 180 km/h)、「AI 輕扶回中」開關、起跑格可選、人聲播報、雙人同機分割畫面。v1(09-05)首發:三條賽道、五檔視角含駕駛座、AI 對手、溫柔規則。</p>
           <button class="start-button" id="startButton">開始比賽</button>
         </div>
       </div>

@@ -91,16 +91,32 @@ export class AudioManager {
     this.skid = { src, gain: sg };
   }
 
-  /** 每幀:rpm 0..1、油門 0..1、渦輪、滑移量 0..1、是否在比賽(選單/結算引擎怠速)。 */
-  setEngine(rpm, throttle, boosting, slip, active) {
+  /** 每幀:rpm 0..1、油門 0..1、渦輪、滑移量 0..1、是否在比賽(選單/結算引擎怠速)、音色 kind(v4:engine 賽車 / moto 摩托車高轉 / hooves 馬蹄)。 */
+  setEngine(rpm, throttle, boosting, slip, active, kind = "engine") {
     if (!this.engine || !this.ctx) return;
     const c = this.ctx, e = this.engine;
     const now = c.currentTime;
-    const base = 55 + rpm * 190 + (boosting ? 40 : 0);
+    if (kind === "hooves") {
+      // 馬:引擎聲關掉,改成跟速度的馬蹄「噠噠」(每步一下噪音+低頻 thump);站著不動就安靜
+      e.gain.gain.setTargetAtTime(0.0001, now, 0.08);
+      const dt = this._hoofLast ? Math.min(0.1, now - this._hoofLast) : 0; this._hoofLast = now;
+      if (active && rpm > 0.03) {
+        this._hoofPhase = (this._hoofPhase || 0) + dt * (2.2 + rpm * 5.5);   // 每秒 2~8 步
+        if (this._hoofPhase >= 1) {
+          this._hoofPhase -= 1;
+          this.noise({ dur: 0.045, gain: 0.07 + rpm * 0.08, f: 700 + rpm * 400, q: 1.8 });
+          this.tone({ f: 95, fEnd: 60, dur: 0.06, type: "triangle", gain: 0.05 + rpm * 0.04 });
+        }
+      } else this._hoofPhase = 0;
+      if (this.skid) this.skid.gain.gain.setTargetAtTime(this.enabled && active ? clamp(slip, 0, 1) * 0.06 : 0.0001, now, 0.06);
+      return;
+    }
+    const moto = kind === "moto";
+    const base = (moto ? 95 : 55) + rpm * (moto ? 320 : 190) + (boosting ? 40 : 0);
     e.osc1.frequency.setTargetAtTime(base, now, 0.05);
-    e.osc2.frequency.setTargetAtTime(base / 2, now, 0.05);
-    e.filter.frequency.setTargetAtTime(320 + rpm * 1900 + throttle * 500, now, 0.06);
-    const vol = active ? 0.05 + throttle * 0.08 + rpm * 0.05 : 0.03;
+    e.osc2.frequency.setTargetAtTime(moto ? base : base / 2, now, 0.05);           // 摩托車:方波同音高=更「鑽」的高轉聲
+    e.filter.frequency.setTargetAtTime((moto ? 600 : 320) + rpm * (moto ? 2600 : 1900) + throttle * 500, now, 0.06);
+    const vol = active ? (moto ? 0.04 : 0.05) + throttle * 0.08 + rpm * 0.05 : 0.03;
     e.gain.gain.setTargetAtTime(this.enabled ? vol : 0.0001, now, 0.08);
     if (this.skid) this.skid.gain.gain.setTargetAtTime(this.enabled && active ? clamp(slip, 0, 1) * 0.12 : 0.0001, now, 0.06);
   }

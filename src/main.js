@@ -4,7 +4,7 @@ import "./styles.css";
 // 鍵位(雙人同機,duel-2p-kit):P1 左手 W/S/A/D + 左Shift 渦輪 + Space 手煞 + V 視角(1~5)+ R 回賽道;
 //                              P2 右手 ↑/↓/←/→ + 右Shift 渦輪 + Enter 手煞 + 0 視角 + Backspace 回賽道。
 //   ★ 單人時 P2 鍵全部別名回 P1(方向鍵照常能玩、沒有死鍵);切雙人同一段程式自動變 P2 專屬。觸控/手把只給 P1。
-import { RacingGame, CAM_VIEWS, CAM_LABELS, CAR_COLORS, LAP_OPTIONS, AI_OPTIONS, TRACKS, BASE_TRACKS, BASE_TRACK_IDS, TRACK_VARIANTS, VARIANT_LABELS, trackIdOf, DIFFICULTY, MODES, ASSIST_MODES, ASSIST_LABELS, GRID_OPTIONS, GRID_LABELS, fmtTime } from "./game.js";
+import { RacingGame, CAM_VIEWS, CAM_LABELS, CAR_COLORS, LAP_OPTIONS, AI_OPTIONS, TRACKS, BASE_TRACKS, BASE_TRACK_IDS, TRACK_VARIANTS, VARIANT_LABELS, trackIdOf, DIFFICULTY, MODES, ASSIST_MODES, ASSIST_LABELS, GRID_OPTIONS, GRID_LABELS, VEHICLES, VEHICLE_IDS, fmtTime } from "./game.js";
 import { AudioManager } from "./audio.js";
 import { GamepadInput } from "./gamepad.js";
 import { loadSettings, saveSettings } from "./storage.js";
@@ -32,6 +32,7 @@ const ui = {
   homeScreen: $("homeScreen"), modeSelect: $("modeSelect"), trackSelect: $("trackSelect"), variantSelect: $("variantSelect"), lapsSelect: $("lapsSelect"), aiSelect: $("aiSelect"),
   difficultySelect: $("difficultySelect"), assistSelect: $("assistSelect"), gridSelect: $("gridSelect"), colorSelect: $("colorSelect"), audioSelect: $("audioSelect"),
   colorLabel: $("colorLabel"), startButton: $("startButton"),
+  vehicleSelect: $("vehicleSelect"), vehicle2Select: $("vehicle2Select"), vehicle2Label: $("vehicle2Label"), vehicleHint: $("vehicleHint"), turboLabel: $("turboLabel"), turboLabel2: $("turboLabel2"),
   pauseButton: $("pauseButton"), pauseOverlay: $("pauseOverlay"), pauseResumeButton: $("pauseResumeButton"), pauseMenuButton: $("pauseMenuButton"),
   recordText: $("recordText"), homeRecord: $("homeRecord"), recText: $("recText"), recText2: $("recText2"),
 };
@@ -47,6 +48,8 @@ const settings = {
   assist: ASSIST_MODES.includes(saved.assist) ? saved.assist : "auto",
   gridPos: GRID_OPTIONS.includes(saved.gridPos) ? saved.gridPos : "last",
   colorIdx: Number.isInteger(saved.colorIdx) && saved.colorIdx >= 0 && saved.colorIdx < CAR_COLORS.length ? saved.colorIdx : 0,
+  vehicle: VEHICLES[saved.vehicle] ? saved.vehicle : "car",
+  vehicle2: VEHICLES[saved.vehicle2] ? saved.vehicle2 : "car",
 };
 let audioEnabled = saved.audioEnabled !== false;
 let helpSeen = saved.helpSeen === true;
@@ -71,6 +74,9 @@ fill(ui.difficultySelect, Object.values(DIFFICULTY).map((d) => ({ value: d.id, l
 fill(ui.assistSelect, ASSIST_MODES.map((m) => ({ value: m, label: ASSIST_LABELS[m] })), settings.assist);
 fill(ui.gridSelect, GRID_OPTIONS.map((g) => ({ value: g, label: GRID_LABELS[g] })), settings.gridPos);
 fill(ui.colorSelect, CAR_COLORS.map((c, i) => ({ value: i, label: c.label })), settings.colorIdx);
+const vehicleItems = VEHICLE_IDS.map((id) => ({ value: id, label: `${VEHICLES[id].emoji} ${VEHICLES[id].label}` }));
+fill(ui.vehicleSelect, vehicleItems, settings.vehicle);
+fill(ui.vehicle2Select, vehicleItems, settings.vehicle2);
 ui.audioSelect.value = audioEnabled ? "on" : "off";
 
 /* ── 遊戲 + 音效 + 人聲 ── */
@@ -82,6 +88,7 @@ const game = new RacingGame({ canvas: ui.canvas });
 window.__racing3d = game;   // dev hook(Playwright 驗收)
 window.__racing3dAudio = audio;
 game.settings.colorIdx = settings.colorIdx;
+game.settings.vehicle = settings.vehicle; game.settings.vehicle2 = settings.vehicle2;
 game.setTrack(settings.trackId);
 game.setPlayerColor(settings.colorIdx);
 
@@ -95,6 +102,7 @@ resize();
 /* ── 選單事件 ── */
 function applyModeUi() {
   const two = settings.mode === "duel2p";
+  if (ui.vehicle2Label) ui.vehicle2Label.hidden = !two;   // P2 載具只在雙人顯示
   // 雙人=鐵則色(P1 藍 / P2 紅),車色選單不生效 ⇒ 鎖起來並說明,孩子不會困惑
   ui.colorSelect.disabled = two;
   if (ui.colorLabel) ui.colorLabel.firstChild.textContent = two ? "車色(雙人固定:P1 藍・P2 紅)" : "車色";
@@ -114,7 +122,19 @@ ui.assistSelect.addEventListener("change", () => { settings.assist = ui.assistSe
 ui.gridSelect.addEventListener("change", () => { settings.gridPos = ui.gridSelect.value; saveSettings({ gridPos: settings.gridPos }); });
 ui.colorSelect.addEventListener("change", () => { settings.colorIdx = Number(ui.colorSelect.value); saveSettings({ colorIdx: settings.colorIdx }); game.setPlayerColor(settings.colorIdx); });
 ui.audioSelect.addEventListener("change", () => setAudio(ui.audioSelect.value === "on"));
+/* v4 載具:選單換=展示車立刻換外型;說明一行講清楚取捨 */
+function updateVehicleHint() {
+  if (!ui.vehicleHint) return;
+  const v = VEHICLES[settings.vehicle] || VEHICLES.car;
+  const two = settings.mode === "duel2p";
+  const v2 = VEHICLES[settings.vehicle2] || VEHICLES.car;
+  ui.vehicleHint.textContent = `${v.emoji} ${v.label}:${v.blurb}${two ? `　P2 ${v2.emoji} ${v2.label}:${v2.blurb}` : ""}　電腦車三種混搭。極速由難度決定,載具只換手感。`;
+}
+ui.vehicleSelect.addEventListener("change", () => { settings.vehicle = game.setVehicle(ui.vehicleSelect.value, 0); saveSettings({ vehicle: settings.vehicle }); game.setPlayerColor(settings.colorIdx); updateVehicleHint(); audio.uiTap(); });
+ui.vehicle2Select.addEventListener("change", () => { settings.vehicle2 = game.setVehicle(ui.vehicle2Select.value, 1); saveSettings({ vehicle2: settings.vehicle2 }); updateVehicleHint(); });
+ui.modeSelect.addEventListener("change", updateVehicleHint);
 applyModeUi();
+updateVehicleHint();
 
 /* ── 本機最佳紀錄(v3):每組「賽道×圈數×難度」記最佳總時間、「賽道×難度」記最佳單圈;首頁與 HUD 都看得到目標 ── */
 let records = loadRecords();
@@ -184,6 +204,8 @@ function startRace() {
   game.startRace({ ...settings });
   buildMiniBase();
   raceRecord = getRecord(records, settings.trackId, settings.laps, settings.difficulty);
+  if (ui.turboLabel) ui.turboLabel.textContent = `⚡ ${(VEHICLES[settings.vehicle] || VEHICLES.car).boostLabel}`;   // 馬=衝刺、車=渦輪
+  if (ui.turboLabel2) ui.turboLabel2.textContent = `⚡ ${(VEHICLES[settings.vehicle2] || VEHICLES.car).boostLabel}`;
   const recLine = raceRecord.lap ? `・紀錄 ${fmtTime(raceRecord.lap)}` : "";
   ui.recText.textContent = recLine; ui.recText2.textContent = recLine;
   raceStartedAt = performance.now();
@@ -459,7 +481,7 @@ function showResults(r) {
     const tr = document.createElement("tr");
     if (row.isPlayer) tr.className = "me";
     const color = "#" + row.colorHex.toString(16).padStart(6, "0");
-    tr.innerHTML = `<td>${row.rank}</td><td><span class="dot" style="background:${color}"></span>${row.name}</td><td>${row.time != null ? fmtTime(row.time) : "還在跑"}</td><td>${row.bestLap ? "單圈 " + fmtTime(row.bestLap) : ""}</td>`;
+    tr.innerHTML = `<td>${row.rank}</td><td><span class="dot" style="background:${color}"></span>${row.vehicleEmoji || ""} ${row.name}</td><td>${row.time != null ? fmtTime(row.time) : "還在跑"}</td><td>${row.bestLap ? "單圈 " + fmtTime(row.bestLap) : ""}</td>`;
     ui.resultTable.appendChild(tr);
   }
   setTimeout(() => ui.resultOverlay.classList.add("visible"), 1200);   // 先看 1.2 秒繞場,再出結算卡
@@ -493,7 +515,7 @@ game.update = (dt) => {
   if (flashTimer > 0) flashTimer -= dt;
   const p = game.player, cfg = DIFFICULTY[game.settings.difficulty] || DIFFICULTY.easy;
   const active = (game.phase === "racing" || game.phase === "finished") && !game.paused;
-  if (p) audio.setEngine(active ? (Math.abs(p.speed) / cfg.maxSpeed) : 0.1, active ? game.input.throttle : 0, !!p.boosting, Math.min(1, Math.abs(p.lat) / 6), active);
+  if (p) audio.setEngine(active ? (Math.abs(p.speed) / cfg.maxSpeed) : 0.1, active ? game.input.throttle : 0, !!p.boosting, Math.min(1, Math.abs(p.lat) / 6), active, (VEHICLES[p.vehicle] || VEHICLES.car).sound);
 };
 game.start();
 

@@ -1,7 +1,7 @@
-racing3d 交接 — 2026-09-07(v3:暫停 / 方向變體 / 紀錄 / 完美起跑 / 彩帶 / 排行房)
+racing3d 交接 — 2026-09-07(v3:暫停 / 方向變體 / 紀錄 / 完美起跑 / 彩帶 / 排行房;v4:載具三型)
 
 ★ 現況(以這段為準)
-- 已完成 v1(09-05 一天建成)+ v2(09-06)+ v3(09-07,「賽車下一步」S 級六項一個下午)。線上是 v3。
+- 已完成 v1(09-05 一天建成)+ v2(09-06)+ v3(09-07 S 級六項)+ v4(09-07 載具選擇)。線上是 v4。
   · 三條基底賽道(草原 1338m / 沙漠 1836m / 雪山 1199m,含高度剖面)× 四個方向(正走/逆走/鏡像/鏡像逆走)= 12 條
   · 五檔視角(追尾/車頭/駕駛座第一人稱/高空俯瞰/轉播機位;V 或 1~5 切,localStorage 記住)
   · AI 對手 0~5 台、難度五檔(幼兒 86 → 職業 180 km/h)、渦輪(遲滯計費)、車對車溫柔碰撞、「AI 輕扶回中」三態開關、起跑格可選
@@ -17,11 +17,14 @@ racing3d 交接 — 2026-09-07(v3:暫停 / 方向變體 / 紀錄 / 完美起跑 
   · 【v3】🎉 彩帶:單人前三 / 雙人有人贏(win-confetti,reduced-motion no-op)
   · 【v3】🏆 課堂排行房:index.html 掛 hfpc-play-room rank.js,單人完賽回報平均時速 km/h(全班同賽道同難度同圈數才公平)
   · 【v3】AI 種子每場輪換(再來一場車道偏好/完美起跑不一樣;同一個 RacingGame 第一場固定,測試可重現)
+  · 【v4】🏍️ 載具三型:🏎️ 賽車(均衡)/ 🏍️ 摩托車(轉快、車窄 0.9m 好鑽、起步快;抓地差、草地更慢)/ 🐎 馬(草地零減速可切內側、抓地好;起步慢、衝刺耗體力)
+  · 【v4】電腦車三種混搭(每場排列不同)、雙人 P1/P2 各選;駕駛座各有眼位(摩托車握把儀表、馬頭與韁繩);音色三種(引擎/高轉/馬蹄);摩托車內傾壓車、馬有奔跑循環
+  · 【v4】平衡:極速由難度管、載具只換手感;0907 掃 8 組校到草原一圈差 3.2%(賽車 45.4 / 摩托車 46.1 / 馬 44.6 秒),vehicles.test ③ 守 ≤10%
 
 - 驗收(0907 實跑,不是憑印象):
-  · npm test 1255 項全綠 = track 806(12 條 × 原斷言 + 變體對應)/ vehicle 77 / race 156 / race2p 60 / commentary 82 / v3 74
-  · npm run check:local 真瀏覽器 68/68,截圖 screenshots/(新增 12-home-variant-rev / 13-pause;11-duel2p-results 有彩帶與雙人新紀錄行)
-  · 線上 CHECK_URL browser-check 68/68(對 Netlify 正址跑,見 CLAUDE.md 部署段)
+  · npm test **1434** 項全綠 = track 806 / vehicle 77 / race 156 / race2p 60 / commentary 84 / v3 74 / vehicles 177
+  · npm run check:local 真瀏覽器 **78/78**,截圖 screenshots/(v3 新增 12-home-variant-rev / 13-pause;v4 新增 14-home-horse / 15-horse-chase / 16-horse-cockpit / 17-moto-cockpit / 18-moto-chase)
+  · 線上 CHECK_URL browser-check **78/78**(對 Netlify 正址跑,見 CLAUDE.md 部署段);線上 sw = racing3d-v4
 
 - 版控與部署:
   · GitHub https://github.com/summer09201017-cloud/racing3d(main)
@@ -29,32 +32,33 @@ racing3d 交接 — 2026-09-07(v3:暫停 / 方向變體 / 紀錄 / 完美起跑 
     site id 4d240b0c-e780-4962-bf85-30779e678b64,direct upload、未接 GitHub build
     ⇒ ★ git push 不會上線,改完一定要重跑:
       npm test && npm run build && netlify deploy --prod --dir dist --site <id> --no-build
-  · sw CACHE = racing3d-v3;verTag v3(含 v2、v1 兩行簡歷)
+  · sw CACHE = racing3d-v4;verTag v4(含 v3、v2、v1 簡歷)
   · 為什麼在 Netlify 不在 CF:Cloudflare 帳號 0903 起 ToS 審查凍結;0904 使用者拍板
     「凍結期間純靜態新站先上 Netlify、站名加 new- 前綴」。審查解除後搬 CF Pages(hfpc-racing3d)。
   · 帳本四處 0906 已登記(奧運頁卡 / 作品集 / play-stats NAMES / sites.json 兩份);v3 不需再登(網址與統計鍵不變)。
 
 ★ 待使用者拍板(別動工)
-- 「賽車下一步」A 級要挑哪一件當 v4 主菜(roadmap.md 待做表):建議先讓真孩子玩 10 分鐘再挑——
-  單調 ⇒ 道具層;想再來 ⇒ 今日挑戰 ?daily(便宜一半)。統計 0907 早只有 2 次開啟,都是驗收場。
-- 載具選擇(摩托車 / 馬 / 跑步 / 懸浮車…,使用者 0907 提):方案見下段「載具方案」,要拍板 ①首批做哪兩型 ②同場混搭還是同載具。
+- **A 級下一件當 v5 主菜**(roadmap.md 待做表):建議先讓真孩子玩 10 分鐘再挑——單調 ⇒ 道具層;想再來 ⇒ 今日挑戰 ?daily(便宜一半)。
+  統計 0907 早只有 2 次開啟、1 次完賽,都是驗收場,**還沒有孩子玩過**。
+- 載具第二批(🏃 跑步 / 🛸 懸浮車)要不要做:骨架已在,各 2.5~3 時;建議等現有三型有真人回饋再決定。
+- ~~載具首批哪兩型 / 混搭與否~~ ✅ 0907 使用者拍板「摩托車+馬、同場混搭」⇒ v4 已完工上線。
 - 審查解除後要不要立刻搬 CF Pages?(帳本四處網址要一起改;統計鍵 ?g=racing3d 不變,但 origin 變 ⇒ 已裝的 PWA 要重裝、本機紀錄歸零)
 
-★ 載具方案(0907 規劃,未動工;細節與估時在大表「十二站健檢」賽車段)
+★ 載具(v4 已完工;第二批方案留著)
 - 骨架:載具 = 「參數包 + 3D rig + 音色 + 駕駛座殼」四件,物理仍是同一支 stepCar。
   vehicle.js 的 CAR 常數變成「基底」,每型載具給一組倍率(turnRate / grip / drag / boostAccel / grassSpeedMul / 車寬車長);
   stepCar 讀 car.params(沒給=CAR,現有 77 項測試逐位元不變)。
 - 鐵則:極速由「難度」管、載具只換手感,每型的取捨零和(轉得快就抓地差、越野強就直線慢),AI 隨機混搭。
   不然幼兒選跑步 60 km/h、對手開車 180 km/h,場面不成立。
-- 首批建議 2 型:🏍 摩托車(轉向快、車窄好鑽、抓地差、駕駕座=握把)與 🐎 馬(mount-riding-kit 現成 rig、渦輪=衝刺體力、草地不減速、駕駛座=馬頭與韁繩)。
-  第二批:🏃 跑步(3d-figure-kit 人物、鏡頭高度 1.6、渦輪=衝刺)、🛸 懸浮車(無輪、漂移大、草地不減速、第一人稱=艙罩)。
-- 各型估時:摩托車 3 時 / 馬 3 時(收割 mount-riding-kit)/ 跑步 3 時 / 懸浮車 2.5 時;骨架(參數包 + 選單 + 測試)1.5 時。
+- ✅ 首批已做:🏍 摩托車 + 🐎 馬(見上方 v4);骨架 `src/vehicles.js` + `src/rigs.js` 已在,加一型只要「VEHICLES 加一筆 + rigs.js 加一支 + game.js `_makeRig` 一行 + 跑零和測試」。
+- ⏩ 第二批(未動工):🏃 跑步(3d-figure-kit 人物、鏡頭高 1.6、渦輪=衝刺,約 3 時)、🛸 懸浮車(無輪、漂移大、草地不減速、第一人稱=艙罩,約 2.5 時)。
 
-★ v3 這輪的新地雷(細節在 CLAUDE.md 地雷 13~16)
+★ v3/v4 這兩輪的新地雷(細節在 CLAUDE.md 地雷 13~18)
 1. 判斷檔案是 LF 還是 CRLF 請用 node,Git Bash 的 grep $'\r' 會誤報。
 2. rank.js 的 🏆 浮鈕釘在左側 top 112px,左上卡片要讓位(left 62px)。
 3. 玩法說明打開=順手暫停,測試腳本一定要真 click 關掉說明才會倒數。
 4. AI 完美起跑的測試不能釘單場(種子固定 ⇒ 單場結果永遠一樣),要用多場合計區間。
+5.(v4)馬背第一人稱眼位要**高過騎士頭**:2.74 時馬頭擋住畫面正中央,抬到 2.98 才看得到前方。新載具的第一人稱一定要真截圖看,測試驗不出「擋不擋視線」。
 
 指令
   npm run dev(或雙擊 run.bat)/ npm test / npm run build && npm run check:local / npm run voice

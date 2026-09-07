@@ -1,13 +1,13 @@
 # racing3d — 3D 賽車・五檔視角(含駕駛座第一人稱)+ 雙人同機
 
 Three.js 街機賽車:自由移動的車體 + 閉環樣條賽道(3 基底 × 4 方向 = 12 條)+ 五檔視角(追尾/車頭/駕駛座/高空俯瞰/轉播機位)+ AI 對手 + 溫柔規則
-+ 分割畫面雙人同機 + 預烤人聲播報 + 暫停 / 完美起跑 / 本機紀錄 / 課堂排行房 / 彩帶。
-2026-09-05 開工、09-06 v2、09-07 v3(規劃見記憶 racing3d-plan)。現況以 `讀我-HANDOFF.txt` ★段為準,待做見 `roadmap.md`。
++ 分割畫面雙人同機 + 預烤人聲播報 + 暫停 / 完美起跑 / 本機紀錄 / 課堂排行房 / 彩帶 + **載具三型(賽車/摩托車/馬,同場混搭)**。
+2026-09-05 開工、09-06 v2、09-07 v3 與 v4(規劃見記憶 racing3d-plan)。現況以 `讀我-HANDOFF.txt` ★段為準,待做見 `roadmap.md`。
 
 ## 指令
 
 - `npm run dev` / `run.bat` — 本機開發(<http://localhost:5173>)
-- `npm test` — 純函數六層 node 直測(track 含 12 條變體 / vehicle / race headless / race2p 雙人+輔助+起跑格 / commentary 播報對賬 / v3 暫停・完美起跑・紀錄・變體),不用瀏覽器
+- `npm test` — 純函數七層 node 直測(track 含 12 條變體 / vehicle / race headless / race2p 雙人+輔助+起跑格 / commentary 播報對賬 / v3 暫停・完美起跑・紀錄 / v4 載具三型・零和平衡),不用瀏覽器
 - `npm run build && npm run check:local` — 真瀏覽器驗收(playwright-core+系統 Edge,免下載):起 preview → 開賽真 click → 五檔視角各截一張 → 結算 → **雙人同機分割畫面** → `screenshots/` → 0 pageerror
 - `CHECK_URL="https://..." node scripts/browser-check.mjs` — 直驗線上
 - `npm run voice` — 重烤人聲 mp3(需網路;只有在 `PHRASES` 加句子後才要跑,累加式)
@@ -17,6 +17,8 @@ Three.js 街機賽車:自由移動的車體 + 閉環樣條賽道(3 基底 × 4 �
 | 檔 | 職責 |
 |---|---|
 | `src/track.js` | ★地基:閉環 Catmull-Rom 等弧長取樣 2000 點 + 高度剖面(smoothstep 關鍵影格)。`posAt(dist)`、`nearest(x,z,hint)`(里程/帶號橫向/高度)、`pointAtOffset`、`tvCameraSpots`。`BASE_TRACKS` 一條賽道一筆資料,加賽道不加程式;`variantOf` 展開 逆走(控制點反序+高度 u→1−u)/ 鏡像(x 取負)⇒ `TRACKS` 12 條 |
+| `src/vehicles.js` | **v4 載具資料層**(純資料,不 import THREE):`VEHICLES` 三型 = 參數倍率 `over` + 駕駛座眼位 `eye` + 車頭眼位 `hood` + 音色 + 衝刺條名稱 + 說明;`vehicleParams(id)` = `{...CAR, accelMul:1, gripMul:1, ...over}`(賽車逐鍵 == CAR ⇒ 舊 77 項車體測試不變);`aiVehicleFor(i, offset)` 混搭 |
+| `src/rigs.js` | **v4 摩托車/馬的 3D 外型**,與 `_makeCarRig` 同一回傳契約(多 `kind` / `leanIn` / `anim`)。馬照 mount-riding-kit 馬體鐵則(矩形身體、長腿 v3、鬃毛三件套、雙眼雙耳);騎士照 3d-figure-kit 臉部鐵則(眼白+瞳孔+微笑+耳前無髮) |
 | `src/vehicle.js` | 街機車體純函數 `stepCar`:油門/煞車/倒車、轉向率隨速度、橫向滑移(甩尾)、渦輪計費(遲滯)、出界變慢、撞牆彈開、逆向偵測、卡住自動救援、圈數。**`ASSIST` PD 輔助**與 `assistStrength()` 三態。`resolveCollisions` 車對車溫柔推開。`DIFFICULTY` 五檔 |
 | `src/ai.js` | 對手腦:追前方車道點 + 彎前煞車 `v=sqrt(latAcc/k)` + 閃避 + 溫柔橡皮筋 + 渦輪(同一套計費) |
 | `src/game.js` | THREE 場景(換賽道=換整個 Scene)、車體 rig(外殼+車內組)、**`cams` 雙視窗鏡頭**、狀態機 menu→countdown→racing→finished、名次/結算。不碰 DOM;headless 可在 node 跑整場 |
@@ -35,6 +37,17 @@ Three.js 街機賽車:自由移動的車體 + 閉環樣條賽道(3 基底 × 4 �
   預設玩家排**最後一排**(後面沒車擋追尾鏡頭、超車才好玩),選單可改最前排;雙人一定同一排(P1 左 P2 右,跟分割畫面一致)。
 - 雙人:`car.playerIdx` = 視窗索引 = `cams` 索引 = P1/P2。單閘門 `is2P()`,別另開旗標。
 - 賽道 id:基底 `meadow`;變體 `meadow-rev` / `meadow-mir` / `meadow-mirrev`(`trackIdOf(base, variant)`)。正走 label 不加後綴,變體加「・逆走」等;`TRACKS[id].base / .variant` 給選單還原。變體是不同賽道 ⇒ 紀錄分開。
+
+## v4 載具(0907 使用者拍板:首批摩托車+馬、同場混搭)
+
+- **一條鐵則**:**極速由難度管、載具只換手感**,每型取捨零和(轉得快就抓地差、越野強就起步慢)。否則幼兒選馬 60 km/h 對上職業賽車 180 km/h,場面不成立。
+- **參數包**:`stepCar` 開頭 `const P = car.params || CAR`,原本 23 處 `CAR.x` 全改 `P.x`;`cfg.accel` 乘 `accelMul`、`cfg.grip` 乘 `gripMul`(**難度的極速 `cfg.maxSpeed` 刻意不乘**)。`resolveCollisions` 改用兩台各自的 width/length 取平均 ⇒ 摩托車 0.9m 真的鑽得過。
+- **平衡校正**(0907 掃 8 組,草原一圈自動駕駛):賽車 45.4s / 摩托車 46.1s(grip 0.9・accel 1.15)/ 馬 44.6s(grip 1.08・accel 0.88),差 **3.2%**;`vehicles.test` ③ 守 ≤10%,改參數會當場紅。
+- **AI 混搭**:`vOff = mulberry(1000 + raceNo*7919)()` 決定起點,第 i 台拿 `VEHICLE_IDS[(i+vOff) % 3]` ⇒ 每場排列不同、≥2 台一定不同種。
+- **rig 契約**:`{ group, tilt, wheels, hide, flame, cockpit, tailMat|null, paint, kind, leanIn, anim|null }`。`_syncRig` 對 `flame`/`tailMat`/`anim`/`needlePivot` 全部先判 null(馬沒有煞車燈與速度表)。`cockpit.userData` 改成 `{ wheel, wheelAxis, wheelGain, needlePivot }`:賽車方向盤 z×1.7、馬韁 y×−0.25、摩托車把手在前叉(gain 0,靠 `wheels[0].pivot` 那一份轉向)。
+- **傾身**:`rig.leanIn` 為真(摩托車)⇒ `rollT = clamp(−yawRate·speed·0.02, ±0.45)` **內傾壓車**;賽車/馬維持原本的外傾 ±0.14。
+- **馬**:`wheels` 是空陣列(沒有輪子),`wheelRadius: 1.0` 讓 `car.wheelSpin` 直接當奔跑相位(每 2π 公尺一步);`anim(car)` 跑四腿 sin 相位 [0, π/2, π, 3π/2] + 身體 bob + 頸點頭 + 尾擺。
+- **音色**:`audio.setEngine(..., kind)`——`engine` 賽車原樣、`moto` 基頻 95Hz 起跳且方波同音高(更「鑽」)、`hooves` 把引擎音量歸零改放跟速度的馬蹄噠噠(站著不動就安靜)。
 
 ## v3 規則(0907,改動前先讀)
 
@@ -70,6 +83,7 @@ Three.js 街機賽車:自由移動的車體 + 閉環樣條賽道(3 基底 × 4 �
 14. **rank.js 的 🏆 浮鈕釘在 top 112px 左側 8~56px**(0907 截圖抓到):左上 `.race-card` 原本 left 12px 會被它蓋住「第 N 名」那行 ⇒ 卡片 left 改 62px。任何新浮鈕先看 index.html 尾端那些跨站 script 各佔哪個角。
 15. **玩法說明打開=順手暫停**(v3):browser-check 第一次開賽會自動跳說明,腳本一定要真 click 關掉才會倒數(現有腳本本來就這樣做,但新增測試別假設「開賽 N 秒後一定 racing」)。
 16. **AI 完美起跑的測試不能釘單場**(0907):種子固定 ⇒ 單場結果固定,「5 台全中」單場機率 3% 但一旦發生就永遠發生;改用六場合計區間 + kids < hard(見 v3.test ②)。
+18. **馬背駕駛座眼位要高過騎士頭**(0907 截圖抓到):`eye.y` 放 2.74(騎士眼高)時**馬頭正好擋在畫面正中央**;抬到 2.98、z 往後 0.1 才看得到前方。任何新載具的第一人稱都要真的截一張圖看,測試只驗「鏡頭在載具上、數值有限」,擋不擋視線它不知道。
 17. **判斷檔案 LF/CRLF 用 node 不用 Git Bash 的 grep**(0907):`grep -q $''` 在這台的 Git Bash 對 CRLF 檔也回「LF」,害補丁腳本第一次錨點全找不到;`node -e` 讀進來 `includes("
 ")` 才準(本 repo 現況:src/*.js 與 styles.css 是 CRLF,md/html/json 是 LF)。
 
@@ -81,6 +95,6 @@ site id `4d240b0c-e780-4962-bf85-30779e678b64`;源碼 GitHub `summer09201017-clo
 - **為什麼不是 CF**:Cloudflare 帳號 2026-09-03 起 ToS 審查(CF 原信只禁「加新網域」;「不建新 Pages/Worker」是我們 0903 自訂的預防規則),0904 使用者拍板「凍結期間純靜態新站先上 Netlify、站名加 `new-` 前綴」。審查解除後再搬 CF Pages(`hfpc-racing3d`),見 `roadmap.md` 待做第 1 項。
 - **更新流程(★ git push 不會上線,一定要重跑 deploy)**:
   `npm test && npm run build && netlify deploy --prod --dir dist --site 4d240b0c-e780-4962-bf85-30779e678b64 --no-build`
-  → `CHECK_URL=https://new-hfpc-racing3d.netlify.app node scripts/browser-check.mjs`。殼層(index.html / sw.js / manifest / voice)有改就 bump sw `CACHE`(目前 `racing3d-v3`)。
+  → `CHECK_URL=https://new-hfpc-racing3d.netlify.app node scripts/browser-check.mjs`。殼層(index.html / sw.js / manifest / voice)有改就 bump sw `CACHE`(目前 `racing3d-v4`)。
 - psPing id `racing3d`(index.html)、`racing3d-done` / `racing3d-dwell`(main.js)——beacon 只排除 localhost、不認 hostname,Netlify 上照常打;verTag 在 `index.html #verTag`。
 - **帳本四處 2026-09-06 已登記**(由 0905-bb 場完成並逐站驗過):奧運頁卡(`Desktop/hfpc-olympics`,dca2e9c)、作品集(7c0fcad)、play-stats NAMES+versions(87ec829)、sites.json 兩份。搬 CF 時這四處的網址要一起改。

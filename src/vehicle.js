@@ -61,9 +61,10 @@ export function emptyInput() {
 }
 
 /** 建一台車的狀態(全數字初值=NaN 疫苗)。 */
-export function createCar({ x = 0, z = 0, heading = 0, y = 0, name = "車手", isPlayer = false, playerIdx = 0, colorIdx = 0 } = {}) {
+export function createCar({ x = 0, z = 0, heading = 0, y = 0, name = "車手", isPlayer = false, playerIdx = 0, colorIdx = 0, vehicle = "car", params = null } = {}) {
   return {
     name, isPlayer, playerIdx, colorIdx,
+    vehicle, params,   // v4 載具:params = vehicleParams(vehicle)(vehicles.js);null = 基底 CAR
     x, y, z, heading,
     speed: 0,        // 前進速度(可負=倒車)
     lat: 0,          // 橫向滑移速度(+右)
@@ -99,6 +100,8 @@ export function stepCar(car, input, dt, cfg, track, opts = {}) {
   const events = [];
   if (dt <= 0) return events;
   const L = track.length;
+  const P = car.params || CAR;                        // v4 載具參數包(沒給=賽車基底;vehicles.js)
+  const accelMul = P.accelMul ?? 1, gripMul = P.gripMul ?? 1;
 
   // ── 轉向平滑 + AI 輕扶回中(離中線太遠時輕輕拉回;玩家自己在打方向就少介入)
   let steerTarget = clamp(input.steer || 0, -1, 1);
@@ -122,51 +125,51 @@ export function stepCar(car, input, dt, cfg, track, opts = {}) {
   if (wantBoost !== car.boosting) events.push(wantBoost ? "boost" : "boostend");
   car.boosting = wantBoost;
   if (car.boosting) {
-    car.turbo = Math.max(0, car.turbo - CAR.turboBurn * dt);
+    car.turbo = Math.max(0, car.turbo - P.turboBurn * dt);
     if (car.turbo <= 0) { car.tired = true; car.boosting = false; events.push("boostend"); }
   } else {
-    car.turbo = Math.min(1, car.turbo + CAR.turboRegen * dt);
-    if (car.tired && car.turbo >= CAR.turboRearm) car.tired = false;
+    car.turbo = Math.min(1, car.turbo + P.turboRegen * dt);
+    if (car.tired && car.turbo >= P.turboRearm) car.tired = false;
   }
 
   // ── 縱向
   const throttle = clamp(input.throttle || 0, 0, 1);
   const brake = clamp(input.brake || 0, 0, 1);
-  let maxSpeed = cfg.maxSpeed * (car.offTrack ? CAR.grassSpeedMul : 1);
-  if (car.boosting) maxSpeed *= CAR.boostSpeedMul;
+  let maxSpeed = cfg.maxSpeed * (car.offTrack ? P.grassSpeedMul : 1);
+  if (car.boosting) maxSpeed *= P.boostSpeedMul;
   let a = 0;
   const v = car.speed, sv = Math.sign(v);
   if (throttle > 0) {
     // 加速隨接近極速遞減(有檔位感),超過極速就不再推
     const frac = clamp(v / maxSpeed, 0, 1);
-    a += cfg.accel * throttle * (1 - frac * 0.6) * (v < maxSpeed ? 1 : 0);
-    if (car.boosting) a += CAR.boostAccel * (1 - frac * 0.5);
+    a += cfg.accel * accelMul * throttle * (1 - frac * 0.6) * (v < maxSpeed ? 1 : 0);
+    if (car.boosting) a += P.boostAccel * (1 - frac * 0.5);
   }
   if (brake > 0) {
-    if (v > 0.4) a -= CAR.brake * brake;
-    else if (v > -CAR.reverseMax) a -= cfg.accel * 0.45 * brake;   // 倒車
+    if (v > 0.4) a -= P.brake * brake;
+    else if (v > -P.reverseMax) a -= cfg.accel * accelMul * 0.45 * brake;   // 倒車
   }
-  a -= sv * (CAR.roll + CAR.drag * v * v);
-  if (car.offTrack) a -= sv * CAR.grassDrag;
+  a -= sv * (P.roll + P.drag * v * v);
+  if (car.offTrack) a -= sv * P.grassDrag;
   if (v > maxSpeed) a -= (v - maxSpeed) * 1.5;                     // 渦輪結束/出界 ⇒ 順順收速
   if (v <= maxSpeed && a > 0) a = Math.min(a, (maxSpeed - v) / dt);   // 這幀不越過極速(0906 drag 變小後會在極速上下抖 ±0.1,測試「不超過極速」抓到)
   const v2 = v + a * dt;
   car.speed = (Math.abs(v2) < 0.12 && throttle === 0 && brake === 0) ? 0 : v2;
   if (v !== 0 && Math.sign(v2) !== sv && throttle === 0 && brake === 0) car.speed = 0; // 純阻力不會反向
-  car.speed = clamp(car.speed, -CAR.reverseMax, cfg.maxSpeed * CAR.boostSpeedMul * 1.05);
+  car.speed = clamp(car.speed, -P.reverseMax, cfg.maxSpeed * P.boostSpeedMul * 1.05);
   car.accel = (car.speed - v) / dt;
 
   // ── 轉向(轉向率隨速度:低速線性縮、高速變鈍)
   const spd = Math.abs(car.speed);
-  const sf = clamp(spd / CAR.steerFullSpeed, 0, 1) / (1 + (spd / CAR.highSpeedFalloff) ** 2 * 0.7);
-  const yaw = -car.steer * CAR.turnRate * sf * (car.speed >= 0 ? 1 : -1);
+  const sf = clamp(spd / P.steerFullSpeed, 0, 1) / (1 + (spd / P.highSpeedFalloff) ** 2 * 0.7);
+  const yaw = -car.steer * P.turnRate * sf * (car.speed >= 0 ? 1 : -1);
   car.yawRate = yaw;
   car.heading = wrapAngle(car.heading + yaw * dt);
 
   // ── 橫向滑移:轉彎把一部分前進動量甩到外側,再被抓地吃掉(手煞=抓地變小=甩尾)
-  const grip = input.handbrake ? CAR.handbrakeGrip : cfg.grip * (car.offTrack ? 0.75 : 1);
+  const grip = input.handbrake ? P.handbrakeGrip : cfg.grip * gripMul * (car.offTrack ? 0.75 : 1);
   const latBefore = car.lat;
-  car.lat += yaw * car.speed * CAR.slipGain * dt;    // yaw<0(右轉)⇒ lat<0(往左=外側);★ 要乘 dt(漏掉=每幀灌一秒的滑移,首跑實踩)
+  car.lat += yaw * car.speed * P.slipGain * dt;    // yaw<0(右轉)⇒ lat<0(往左=外側);★ 要乘 dt(漏掉=每幀灌一秒的滑移,首跑實踩)
   car.lat *= Math.exp(-grip * dt);
   car.latAcc = (car.lat - latBefore) / dt;
 
@@ -202,12 +205,12 @@ export function stepCar(car, input, dt, cfg, track, opts = {}) {
     car.x -= rt.x * over * side; car.z -= rt.z * over * side;
     car.lateral = track.wallDist * side;
     const hitSpeed = Math.abs(car.speed);
-    car.speed *= CAR.wallBounce;
+    car.speed *= P.wallBounce;
     car.lat = -car.lat * 0.4 - side * 1.2;
     const tangentH = headingOfTangent(n.tx, n.tz);
     const dH = wrapAngle(tangentH - car.heading);
     // 倒著撞也一樣拉回「面向牆內」,不強迫正向
-    car.heading = wrapAngle(car.heading + dH * CAR.wallSpin * (Math.abs(dH) < Math.PI / 2 ? 1 : -1));
+    car.heading = wrapAngle(car.heading + dH * P.wallSpin * (Math.abs(dH) < Math.PI / 2 ? 1 : -1));
     car.bumpT = 0.45;
     events.push({ type: "bump", speed: hitSpeed });
   }
@@ -216,13 +219,13 @@ export function stepCar(car, input, dt, cfg, track, opts = {}) {
   // ── 逆向(倒退著跑不算,速度要 >3 且里程在倒退)
   if (delta < 0 && car.speed > 3) car.wrongT += dt; else car.wrongT = Math.max(0, car.wrongT - dt * 2);
   const wasWrong = car.wrongWay;
-  car.wrongWay = car.wrongT > CAR.wrongWaySeconds;
+  car.wrongWay = car.wrongT > P.wrongWaySeconds;
   if (car.wrongWay && !wasWrong) events.push("wrongway");
 
   // ── 卡住自動救援(出界且幾乎不動,或貼牆磨)
   const stuck = (car.offTrack && spd < 2) || (Math.abs(car.lateral) > track.wallDist - 0.6 && spd < 2.5);
   car.stuckT = stuck ? car.stuckT + dt : 0;
-  if (car.stuckT > CAR.stuckSeconds && !opts.noRescue) {
+  if (car.stuckT > P.stuckSeconds && !opts.noRescue) {
     rescue(car, track);
     events.push("rescue");
   }
@@ -241,7 +244,7 @@ export function stepCar(car, input, dt, cfg, track, opts = {}) {
   }
   car.lap = Math.max(car.lap, lapNow);
 
-  car.wheelSpin += (car.speed / CAR.wheelRadius) * dt;
+  car.wheelSpin += (car.speed / P.wheelRadius) * dt;
   return events;
 }
 
@@ -265,16 +268,17 @@ export const kmh = (ms) => Math.round(Math.abs(ms) * 3.6);
  */
 export function resolveCollisions(cars) {
   const events = [];
-  const HW = CAR.width / 2 + 0.05, HL = CAR.length / 2 + 0.05;
   for (let i = 0; i < cars.length; i++) {
     for (let j = i + 1; j < cars.length; j++) {
       const a = cars[i], b = cars[j];
+      const pa = a.params || CAR, pb = b.params || CAR;                       // v4:各自車寬車長(摩托車窄好鑽)
+      const HW2 = (pa.width + pb.width) / 2 + 0.1, HL2 = (pa.length + pb.length) / 2 + 0.1;
       const dx = b.x - a.x, dz = b.z - a.z;
-      if (dx * dx + dz * dz > (CAR.length + 1) ** 2) continue;
+      if (dx * dx + dz * dz > (Math.max(pa.length, pb.length) + 1) ** 2) continue;
       const f = forwardOf(a.heading), r = rightOf(a.heading);
       const lx = dx * r.x + dz * r.z;        // b 在 a 的右側幾米
       const lz = dx * f.x + dz * f.z;        // b 在 a 的前方幾米
-      const penX = HW * 2 - Math.abs(lx), penZ = HL * 2 - Math.abs(lz);
+      const penX = HW2 - Math.abs(lx), penZ = HL2 - Math.abs(lz);
       if (penX <= 0 || penZ <= 0) continue;
       let px = 0, pz = 0;
       if (penX < penZ) { const s = Math.sign(lx || 1) * penX / 2; px = r.x * s; pz = r.z * s; }

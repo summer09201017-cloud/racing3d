@@ -1,6 +1,6 @@
 // 📲 簡易 SW(baseball3d 家族範式):全部 network-first、斷網退 cache。
 // ★ 殼層(index.html / manifest / icon / sw 自己)有改就 bump 這個號碼(static-pwa-ship 鐵則)。
-const CACHE = "racing3d-v3";   // v3 2026-09-07:暫停/方向變體/紀錄/完美起跑/彩帶/排行房(index.html 殼層有改、voice +2 句)
+const CACHE = "racing3d-v4";   // v4 2026-09-07:載具選擇 賽車/摩托車/馬(index.html 殼層有改)
 self.addEventListener("install", () => { self.skipWaiting(); });
 self.addEventListener("activate", (e) => {
   e.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))));

@@ -1,0 +1,189 @@
+// rigs.js —— 載具 3D 外型(v4):🏍️ 摩托車 / 🐎 馬。與 game.js `_makeCarRig` 同一個回傳契約:
+//   { group, tilt, wheels:[{pivot,spin,front}], hide:[駕駛座視角要藏的], flame, cockpit(userData:{wheel,wheelAxis,wheelGain,needlePivot}),
+//     tailMat|null, paint, kind, leanIn, anim(car,dt)|null }
+// 人物鐵則(3d-figure-kit):有臉(眼白+瞳孔+微笑)、帽子露耳(耳前無髮);馬照 mount-riding-kit 馬體鐵則:矩形身體(Box 不用圓筒)、長腿 v3、鬃毛三件套、雙眼雙耳。
+// 座標:原點=地面、+z 朝前;隊色只走 `paint` 一個材質(setPlayerColor 換色不重建)。
+import * as THREE from "three";
+
+const lambert = (color, extra = {}) => new THREE.MeshLambertMaterial({ color, ...extra });
+const box = (w, h, d, mat) => new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+const put = (mesh, x, y, z, parent) => { mesh.position.set(x, y, z); parent.add(mesh); return mesh; };
+const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+
+/** 騎士頭(臉部鐵則):膚色球 + 帽殼 + 眼白/瞳孔 + 微笑 + 露出的耳。原點=脖子。 */
+function makeRiderHead(hatMat, skin) {
+  const g = new THREE.Group();
+  put(new THREE.Mesh(new THREE.SphereGeometry(0.17, 12, 10), skin), 0, 0.17, 0, g);
+  const hat = put(new THREE.Mesh(new THREE.SphereGeometry(0.2, 12, 8, 0, Math.PI * 2, 0, 1.55), hatMat), 0, 0.2, -0.01, g);
+  hat.scale.set(1, 1, 1.05);
+  for (const sx of [-1, 1]) {
+    put(new THREE.Mesh(new THREE.SphereGeometry(0.036, 8, 6), lambert(0xffffff)), sx * 0.06, 0.18, 0.15, g);
+    put(new THREE.Mesh(new THREE.SphereGeometry(0.018, 6, 6), lambert(0x111111)), sx * 0.06, 0.18, 0.182, g);
+    put(new THREE.Mesh(new THREE.SphereGeometry(0.03, 6, 6), skin), sx * 0.165, 0.15, 0.02, g);   // 耳朵(帽子不蓋耳)
+  }
+  const smile = put(new THREE.Mesh(new THREE.TorusGeometry(0.045, 0.008, 6, 10, Math.PI), lambert(0x7a3b2e)), 0, 0.11, 0.165, g);
+  smile.rotation.z = Math.PI;   // 弧開口朝上=微笑
+  return g;
+}
+
+/** 速度表(與車內同款契約):θ = 330° + frac·240°,+rotation.z 對駕駛是順時鐘。回傳 { group, needlePivot }。 */
+function makeGauge(r = 0.1) {
+  const gauge = new THREE.Group();
+  gauge.add(new THREE.Mesh(new THREE.CircleGeometry(r, 28), new THREE.MeshBasicMaterial({ color: 0x0b0e15, side: THREE.DoubleSide })));
+  gauge.add(new THREE.Mesh(new THREE.TorusGeometry(r, r * 0.07, 6, 28), lambert(0xd0d4dc)));
+  for (let i = 0; i <= 8; i++) {
+    const th = (330 + i * 30) * Math.PI / 180;
+    const tick = new THREE.Mesh(new THREE.BoxGeometry(r * 0.17, r * 0.05, 0.004), new THREE.MeshBasicMaterial({ color: i >= 7 ? 0xff5040 : 0xdde3ee, side: THREE.DoubleSide }));
+    tick.position.set(Math.cos(th) * r * 0.83, Math.sin(th) * r * 0.83, -0.004); tick.rotation.z = th; gauge.add(tick);
+  }
+  const needlePivot = new THREE.Group(); needlePivot.position.z = -0.006; gauge.add(needlePivot);
+  const needle = new THREE.Mesh(new THREE.BoxGeometry(r * 0.87, r * 0.09, 0.004), new THREE.MeshBasicMaterial({ color: 0xff4a3d, side: THREE.DoubleSide }));
+  needle.position.x = r * 0.43; needlePivot.add(needle);
+  needlePivot.rotation.z = 330 * Math.PI / 180;
+  return { group: gauge, needlePivot };
+}
+
+/* ═══════════════════════ 🏍️ 摩托車 ═══════════════════════ */
+export function makeMotoRig(hex, { interior = false } = {}, wheelRadius = 0.34) {
+  const group = new THREE.Group(), tilt = new THREE.Group(); group.add(tilt);
+  const paint = lambert(hex), dark = lambert(0x1f2229), chrome = lambert(0xbfc5cf);
+  const skin = lambert(0xf1c9a5, { emissive: 0x8a7355, emissiveIntensity: 0.45 });
+  const hide = [];
+  put(box(0.22, 0.2, 1.1, dark), 0, 0.62, -0.05, tilt);                 // 車架
+  put(box(0.42, 0.34, 0.5, dark), 0, 0.48, 0.05, tilt);                  // 引擎
+  put(box(0.4, 0.3, 0.55, paint), 0, 0.88, 0.25, tilt);                  // 油箱(隊色)
+  put(box(0.34, 0.12, 0.6, dark), 0, 0.86, -0.4, tilt);                  // 座墊
+  put(box(0.3, 0.12, 0.45, paint), 0, 0.82, -0.8, tilt);                 // 尾殼
+  const tailMat = new THREE.MeshLambertMaterial({ color: 0xff3b30, emissive: 0xff2a2a, emissiveIntensity: 0.35 });
+  put(box(0.18, 0.08, 0.04, tailMat), 0, 0.84, -1.03, tilt);
+  const exhaust = put(new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.06, 0.9, 10), chrome), 0.2, 0.4, -0.35, tilt); exhaust.rotation.x = Math.PI / 2;
+  const flame = put(new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.7, 8), new THREE.MeshBasicMaterial({ color: 0xffa321 })), 0.2, 0.4, -1.1, tilt);
+  flame.rotation.x = -Math.PI / 2; flame.visible = false;
+  // 輪:前輪掛在前叉組(=轉向 pivot),後輪掛車架
+  const tireGeo = new THREE.CylinderGeometry(wheelRadius, wheelRadius, 0.14, 18); tireGeo.rotateZ(Math.PI / 2);
+  const hubGeo = new THREE.CylinderGeometry(0.16, 0.16, 0.16, 12); hubGeo.rotateZ(Math.PI / 2);
+  const tireMat = lambert(0x171717);
+  const mkWheel = (parent, x, y, z) => { const spin = new THREE.Group(); spin.position.set(x, y, z); spin.add(new THREE.Mesh(tireGeo, tireMat)); spin.add(new THREE.Mesh(hubGeo, chrome)); parent.add(spin); return spin; };
+  const rearPivot = new THREE.Group(); tilt.add(rearPivot);
+  const rearSpin = mkWheel(rearPivot, 0, wheelRadius, -0.75);
+  const fork = new THREE.Group(); fork.position.set(0, 0.98, 0.62); tilt.add(fork);   // pivot.rotation.y = −steer·0.5(_syncRig)
+  for (const sx of [-1, 1]) { const tube = put(new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.78, 8), chrome), sx * 0.09, -0.32, 0.12, fork); tube.rotation.x = 0.42; }
+  const frontSpin = mkWheel(fork, 0, wheelRadius - 0.98, 0.3);            // 世界 y = wheelRadius(貼地)
+  put(box(0.16, 0.14, 0.1, new THREE.MeshLambertMaterial({ color: 0xfff6d0, emissive: 0xfff2b0, emissiveIntensity: 0.9 })), 0, 0.08, 0.24, fork);   // 頭燈
+  const bar = put(new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.64, 8), chrome), 0, 0.12, -0.02, fork); bar.rotation.z = Math.PI / 2;
+  for (const sx of [-1, 1]) put(new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.12, 8), dark), sx * 0.3, 0.12, -0.02, fork).rotation.z = Math.PI / 2;
+  const wheels = [{ pivot: fork, spin: frontSpin, front: true }, { pivot: rearPivot, spin: rearSpin, front: false }];
+  // 騎士:前傾騎姿、腿夾車、雙手握把;頭有臉(駕駛座視角藏頭與身體,手臂留著)
+  const legMat = lambert(0x2b3a6b);
+  for (const sx of [-1, 1]) {
+    const leg = put(box(0.14, 0.42, 0.16, legMat), sx * 0.2, 0.72, -0.05, tilt); leg.rotation.x = -0.9;
+    put(box(0.12, 0.1, 0.26, dark), sx * 0.22, 0.42, 0.12, tilt);
+  }
+  const torso = put(box(0.36, 0.5, 0.26, paint), 0, 1.16, -0.18, tilt); torso.rotation.x = 0.55; hide.push(torso);
+  for (const sx of [-1, 1]) { const arm = put(new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.62, 8), paint), sx * 0.24, 1.12, 0.22, tilt); arm.rotation.x = 1.15; arm.rotation.z = sx * 0.12; }
+  const head = makeRiderHead(paint, skin); head.position.set(0, 1.28, -0.3); head.rotation.x = -0.15; tilt.add(head); hide.push(head);
+  // 影子
+  const shadow = new THREE.Mesh(new THREE.CircleGeometry(1, 18), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.3, depthWrite: false }));
+  shadow.rotation.x = -Math.PI / 2; shadow.scale.set(0.6, 1.3, 1); shadow.position.y = 0.02; group.add(shadow);
+  // 駕駛座:油箱上的速度表(面向騎士)、把手由前叉組跟著轉
+  let cockpit = null;
+  if (interior) {
+    cockpit = new THREE.Group(); tilt.add(cockpit);
+    const g = makeGauge(0.09); g.group.position.set(0, 1.06, 0.34); g.group.rotation.x = -2.1; cockpit.add(g.group);
+    cockpit.userData = { wheel: new THREE.Group(), wheelAxis: "z", wheelGain: 0, needlePivot: g.needlePivot };   // 把手在 fork 上(wheels[0].pivot),這裡不再轉
+  }
+  return { group, tilt, wheels, hide, flame, cockpit, tailMat, paint, kind: "moto", leanIn: true, anim: null };
+}
+
+/* ═══════════════════════ 🐎 馬 ═══════════════════════ */
+export function makeHorseRig(hex, { interior = false } = {}) {
+  const group = new THREE.Group(), tilt = new THREE.Group(); group.add(tilt);
+  const paint = lambert(hex);                                  // 隊色:鞍毯 + 騎士上衣 + 帽
+  const coat = lambert(0x8a5a33), mane = lambert(0x3a2a1c), sock = lambert(0xe9e2d2), hoof = lambert(0x2a2622);
+  const skin = lambert(0xf1c9a5, { emissive: 0x8a7355, emissiveIntensity: 0.45 });
+  const hide = [];
+  // 軀幹:矩形箱體(胸+臀段)+ 圓弧肌群(肩/臀/腹)—— 不用圓筒
+  put(box(0.62, 0.62, 1.7, coat), 0, 1.58, 0, tilt);
+  put(box(0.58, 0.5, 0.4, coat), 0, 1.62, 0.95, tilt);
+  put(box(0.58, 0.5, 0.42, coat), 0, 1.6, -0.95, tilt);
+  for (const side of [-1, 1]) {
+    const shoulder = put(new THREE.Mesh(new THREE.SphereGeometry(0.2, 12, 10), coat), side * 0.22, 1.5, 0.74, tilt); shoulder.scale.set(1, 1.1, 1.35);
+    const haunch = put(new THREE.Mesh(new THREE.SphereGeometry(0.23, 12, 10), coat), side * 0.19, 1.52, -0.8, tilt); haunch.scale.set(1.05, 1.15, 1.3);
+  }
+  const belly = put(new THREE.Mesh(new THREE.SphereGeometry(0.3, 14, 12), coat), 0, 1.4, -0.05, tilt); belly.scale.set(1.02, 0.82, 1.8);
+  const withers = put(box(0.3, 0.16, 0.46, coat), 0, 1.92, 0.62, tilt); withers.rotation.x = -0.14;
+  // 頸(雙節斜上)+ 頭(雙眼雙耳鼻孔)+ 鬃毛三件套
+  const neckPivot = new THREE.Group(); neckPivot.position.set(0, 1.82, 1.05); tilt.add(neckPivot);
+  const neckLower = put(box(0.34, 0.5, 0.42, coat), 0, 0.1, 0.1, neckPivot); neckLower.rotation.x = 0.55;
+  const neckUpper = put(box(0.26, 0.46, 0.3, coat), 0, 0.42, 0.32, neckPivot); neckUpper.rotation.x = 0.85;
+  const head = new THREE.Group(); head.position.set(0, 0.62, 0.5); neckPivot.add(head);
+  const skull = put(box(0.26, 0.3, 0.52, coat), 0, 0, 0, head); skull.rotation.x = 0.35;
+  const muzzle = put(box(0.2, 0.22, 0.3, mane), 0, -0.12, 0.34, head); muzzle.rotation.x = 0.35;
+  const jaw = put(box(0.19, 0.13, 0.3, coat), 0, -0.21, 0.1, head); jaw.rotation.x = 0.35;
+  const white = new THREE.MeshBasicMaterial({ color: 0xffffff }), darkEye = new THREE.MeshBasicMaterial({ color: 0x1c1712 });
+  for (const side of [-1, 1]) {
+    put(new THREE.Mesh(new THREE.SphereGeometry(0.05, 10, 10), white), side * 0.14, 0.06, 0.14, head);
+    put(new THREE.Mesh(new THREE.SphereGeometry(0.028, 8, 8), darkEye), side * 0.165, 0.06, 0.15, head);
+    const ear = put(new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.16, 6), coat), side * 0.09, 0.24, -0.05, head); ear.rotation.x = -0.2;
+    put(new THREE.Mesh(new THREE.SphereGeometry(0.024, 8, 6), darkEye), side * 0.052, -0.175, 0.47, head);
+  }
+  const maneCrest = put(box(0.14, 0.88, 0.24, mane), 0, 0.36, -0.04, neckPivot); maneCrest.rotation.x = 0.7;
+  const maneSide = put(box(0.06, 0.74, 0.34, mane), 0.17, 0.24, 0.08, neckPivot); maneSide.rotation.x = 0.7;
+  put(box(0.16, 0.22, 0.12, mane), 0, 0.24, 0.08, head);
+  // 尾
+  const tail = new THREE.Group(); tail.position.set(0, 1.62, -1.14); tail.rotation.x = 0.55; tilt.add(tail);
+  put(box(0.13, 0.4, 0.15, mane), 0, -0.16, 0, tail);
+  const tailLower = put(box(0.09, 0.34, 0.11, mane), 0, -0.46, -0.07, tail); tailLower.rotation.x = 0.22;
+  // 四腿(雙節+蹄,前腿白襪;pivot=肩/髖 y 1.35,長腿 v3)
+  const mkLeg = (x, z, white) => {
+    const pivot = new THREE.Group(); pivot.position.set(x, 1.35, z); tilt.add(pivot);
+    put(box(0.15, 0.62, 0.15, coat), 0, -0.31, 0, pivot);
+    const joint = new THREE.Group(); joint.position.y = -0.62; pivot.add(joint);
+    put(new THREE.Mesh(new THREE.SphereGeometry(0.085, 10, 8), white ? sock : coat), 0, 0, 0, joint);
+    put(box(0.11, 0.6, 0.11, white ? sock : coat), 0, -0.3, 0, joint);
+    put(box(0.13, 0.12, 0.16, hoof), 0, -0.62, 0.02, joint);
+    return { pivot, joint };
+  };
+  const legs = [mkLeg(-0.22, 0.72, true), mkLeg(0.22, 0.72, true), mkLeg(-0.2, -0.78, false), mkLeg(0.2, -0.78, false)];
+  // 鞍毯(隊色)+ 鞍 + 肚帶
+  put(box(0.72, 0.05, 0.8, paint), 0, 1.93, 0.05, tilt);
+  put(box(0.44, 0.1, 0.5, lambert(0x4a2f1c)), 0, 1.98, 0.05, tilt);
+  put(box(0.7, 0.68, 0.09, lambert(0x4a2f1c)), 0, 1.56, 0.12, tilt);
+  // 騎士:跨鞍、雙手前伸握韁、有臉(駕駛座藏頭與身體,手臂與韁留著)
+  for (const sx of [-1, 1]) {
+    const thigh = put(box(0.14, 0.4, 0.15, lambert(0x2b3a6b)), sx * 0.34, 1.9, 0.18, tilt); thigh.rotation.x = -1.1; thigh.rotation.z = sx * 0.35;
+    put(box(0.12, 0.42, 0.13, lambert(0x2b3a6b)), sx * 0.4, 1.58, 0.28, tilt);
+    put(box(0.12, 0.1, 0.24, lambert(0x1f2229)), sx * 0.41, 1.34, 0.3, tilt);
+  }
+  const torso = put(box(0.36, 0.5, 0.26, paint), 0, 2.3, 0.05, tilt); torso.rotation.x = 0.18; hide.push(torso);
+  for (const sx of [-1, 1]) { const arm = put(new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.5, 8), paint), sx * 0.2, 2.32, 0.3, tilt); arm.rotation.x = 1.25; }
+  const rHead = makeRiderHead(paint, skin); rHead.position.set(0, 2.56, 0.08); tilt.add(rHead); hide.push(rHead);
+  // 韁繩(手→嚼口),group 隨轉向微轉(cockpit.userData.wheel)
+  const reins = new THREE.Group(); reins.position.set(0, 2.2, 0.45); tilt.add(reins);
+  for (const sx of [-1, 1]) {
+    const rein = put(new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 1.15, 6), lambert(0x3b2a1a)), sx * 0.12, 0.06, 0.55, reins);
+    rein.rotation.x = -Math.PI / 2 + 0.1;
+  }
+  // 衝刺塵土(沿用 flame 契約:boosting 時顯示)
+  const flame = put(new THREE.Mesh(new THREE.ConeGeometry(0.28, 0.9, 8), new THREE.MeshBasicMaterial({ color: 0xd9c39a, transparent: true, opacity: 0.55 })), 0, 0.35, -1.6, tilt);
+  flame.rotation.x = -Math.PI / 2; flame.visible = false;
+  // 影子
+  const shadow = new THREE.Mesh(new THREE.CircleGeometry(1, 18), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.3, depthWrite: false }));
+  shadow.rotation.x = -Math.PI / 2; shadow.scale.set(0.75, 1.6, 1); shadow.position.y = 0.02; group.add(shadow);
+  let cockpit = null;
+  if (interior) { cockpit = new THREE.Group(); tilt.add(cockpit); cockpit.userData = { wheel: reins, wheelAxis: "y", wheelGain: -0.25, needlePivot: null }; }
+  // 奔跑循環(mount-riding-kit):四腿 sin(t+phase)·amp、身體 bob、頸點頭、尾擺;t = car.wheelSpin(wheelRadius 1.0 ⇒ 每 2π 公尺一步)
+  const PH = [0, Math.PI / 2, Math.PI, Math.PI * 1.5];
+  const anim = (car) => {
+    const t = car.wheelSpin, spd = Math.abs(car.speed);
+    const amp = clamp(spd / 14, 0, 0.62);
+    for (let i = 0; i < 4; i++) {
+      legs[i].pivot.rotation.x = Math.sin(t + PH[i]) * amp;
+      legs[i].joint.rotation.x = Math.max(0, Math.sin(t + PH[i] + 0.9)) * amp * 0.9;
+    }
+    tilt.position.y = Math.abs(Math.sin(t)) * 0.06 * Math.min(1, spd / 10);
+    neckPivot.rotation.x = Math.sin(t) * amp * 0.12;
+    tail.rotation.x = 0.55 + Math.sin(t * 0.9) * 0.15;
+  };
+  return { group, tilt, wheels: [], hide, flame, cockpit, tailMat: null, paint, kind: "horse", leanIn: false, anim };
+}

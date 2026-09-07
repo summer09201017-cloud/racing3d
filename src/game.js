@@ -7,8 +7,10 @@ import * as THREE from "three";
 import { TRACKS, TRACK_IDS, BASE_TRACKS, BASE_TRACK_IDS, TRACK_VARIANTS, VARIANT_LABELS, trackIdOf, buildTrack, posAt, pointAtOffset, rightOfTangent, tvCameraSpots, nearest } from "./track.js";
 import { CAR, DIFFICULTY, ASSIST_MODES, ASSIST_LABELS, assistStrength, createCar, placeOnTrack, stepCar, emptyInput, rescue, forwardOf, rpm01, kmh, clamp, resolveCollisions } from "./vehicle.js";
 import { makeAiBrain, aiInput } from "./ai.js";
+import { VEHICLES, VEHICLE_IDS, vehicleParams, aiVehicleFor } from "./vehicles.js";
+import { makeMotoRig, makeHorseRig } from "./rigs.js";
 
-export { TRACKS, TRACK_IDS, BASE_TRACKS, BASE_TRACK_IDS, TRACK_VARIANTS, VARIANT_LABELS, trackIdOf, DIFFICULTY, ASSIST_MODES, ASSIST_LABELS };
+export { TRACKS, TRACK_IDS, BASE_TRACKS, BASE_TRACK_IDS, TRACK_VARIANTS, VARIANT_LABELS, trackIdOf, DIFFICULTY, ASSIST_MODES, ASSIST_LABELS, VEHICLES, VEHICLE_IDS };
 
 /* 模式(duel-2p-kit 單閘門:所有分歧只問 is2P()):solo=單人;duel2p=雙人同機分割畫面(左 P1 藍、右 P2 紅,鐵則色)。 */
 export const MODES = { solo: { id: "solo", label: "單人" }, duel2p: { id: "duel2p", label: "雙人同機(分割畫面)" } };
@@ -35,7 +37,7 @@ export const CAR_COLORS = [
 export const LAP_OPTIONS = [1, 2, 3, 5];
 export const AI_OPTIONS = [0, 1, 2, 3, 5];
 export const AI_NAMES = ["阿福", "小美", "大衛", "以諾", "米迦", "撒拉", "約書亞"];
-export const DEFAULT_SETTINGS = { trackId: "meadow", laps: 3, aiCount: 3, difficulty: "easy", colorIdx: 0, mode: "solo", assist: "auto", gridPos: "last" };
+export const DEFAULT_SETTINGS = { trackId: "meadow", laps: 3, aiCount: 3, difficulty: "easy", colorIdx: 0, mode: "solo", assist: "auto", gridPos: "last", vehicle: "car", vehicle2: "car" };
 const COUNTDOWN_SECONDS = 3.6;
 /* 完美起跑(v3 規則,0907):GO 之後 window 秒內踩油門、而且油門「連續按住」還不到 hold 秒(倒數到「1」才踩算,從「3」就一直按不算)
    ⇒ 免費渦輪 boostSeconds 秒(燃料每幀退回,不碰 stepCar 物理)。太早按不罰、只提醒(溫柔規則)。
@@ -505,9 +507,16 @@ export class RacingGame {
       add(new THREE.Mesh(new THREE.BoxGeometry(1.56, 0.07, 0.14), trim), 0, 1.48, 0.86, cockpit);        // 擋風玻璃頂梁(離眼 ~0.95m)
       add(new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.07, 0.04), trim2), 0, 1.42, 0.8, cockpit);        // 後視鏡柱
       add(new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.09, 0.03), lambert(0x9fb4d0)), 0, 1.37, 0.8, cockpit); // 後視鏡
-      cockpit.userData = { wheel, needlePivot };
+      cockpit.userData = { wheel, wheelAxis: "z", wheelGain: 1.7, needlePivot };
     }
-    return { group, tilt, wheels, hide, flame, cockpit, tailMat, paint };
+    return { group, tilt, wheels, hide, flame, cockpit, tailMat, paint, kind: "car", leanIn: false, anim: null };
+  }
+
+  /** v4 載具外型分派:同一個回傳契約(rigs.js)。 */
+  _makeRig(vehicle, hex, opts) {
+    if (vehicle === "moto") return makeMotoRig(hex, opts, (VEHICLES.moto.over.wheelRadius || 0.34));
+    if (vehicle === "horse") return makeHorseRig(hex, opts);
+    return this._makeCarRig(hex, opts);
   }
 
   /* ───────────────────────── 車隊 ───────────────────────── */
@@ -518,8 +527,9 @@ export class RacingGame {
   }
 
   _spawnCar(opts, colorHex, interior) {
-    const car = createCar(opts);
-    const rig = this._makeCarRig(colorHex, { interior });
+    const vehicle = VEHICLES[opts.vehicle] ? opts.vehicle : "car";
+    const car = createCar({ ...opts, vehicle, params: vehicleParams(vehicle) });
+    const rig = this._makeRig(vehicle, colorHex, { interior });
     this.scene.add(rig.group);
     this.cars.push(car); this.rigs.set(car, rig);
     return car;
@@ -528,10 +538,18 @@ export class RacingGame {
   _placeMenuCar() {
     this._clearCars();
     const t = this.track;
-    const car = this._spawnCar({ name: "你", isPlayer: true, playerIdx: 0, colorIdx: this.settings.colorIdx }, CAR_COLORS[this.settings.colorIdx].hex, true);
+    const car = this._spawnCar({ name: "你", isPlayer: true, playerIdx: 0, colorIdx: this.settings.colorIdx, vehicle: this.settings.vehicle }, CAR_COLORS[this.settings.colorIdx].hex, true);
     placeOnTrack(car, t, t.length - 6, -t.halfW * 0.45);
     this.player = car; this.players = [car];
     this._syncRig(car, 0);
+  }
+
+  /** v4:換載具(idx 0=P1 / 1=P2);選單期重建展示車。亂值回賽車。 */
+  setVehicle(id, idx = 0) {
+    id = VEHICLES[id] ? id : "car";
+    if (idx === 1) this.settings.vehicle2 = id; else this.settings.vehicle = id;
+    if (this.phase === "menu" && idx === 0) { this._placeMenuCar(); this._snapCams(); this.pushHud(); }
+    return id;
   }
 
   setPlayerColor(idx) {
@@ -552,6 +570,8 @@ export class RacingGame {
     if (!MODES[next.mode]) next.mode = "solo";
     if (!ASSIST_MODES.includes(next.assist)) next.assist = "auto";
     if (!GRID_OPTIONS.includes(next.gridPos)) next.gridPos = "last";
+    if (!VEHICLES[next.vehicle]) next.vehicle = "car";
+    if (!VEHICLES[next.vehicle2]) next.vehicle2 = "car";
     const trackChanged = next.trackId !== this.settings.trackId || !this.scene;
     this.settings = next;
     if (trackChanged) this.setTrack(next.trackId);
@@ -561,17 +581,18 @@ export class RacingGame {
     const two = next.mode === "duel2p";
     // 人類車手:單人=選的車色;雙人=鐵則色 P1 藍 / P2 紅(車色選單在雙人模式不生效)
     const p1Color = two ? P1_COLOR : next.colorIdx;
-    const p1 = this._spawnCar({ name: two ? "P1" : "你", isPlayer: true, playerIdx: 0, colorIdx: p1Color }, CAR_COLORS[p1Color].hex, true);
+    const p1 = this._spawnCar({ name: two ? "P1" : "你", isPlayer: true, playerIdx: 0, colorIdx: p1Color, vehicle: next.vehicle }, CAR_COLORS[p1Color].hex, true);
     this.player = p1; this.players = [p1];
-    if (two) this.players.push(this._spawnCar({ name: "P2", isPlayer: true, playerIdx: 1, colorIdx: P2_COLOR }, CAR_COLORS[P2_COLOR].hex, true));
+    if (two) this.players.push(this._spawnCar({ name: "P2", isPlayer: true, playerIdx: 1, colorIdx: P2_COLOR, vehicle: next.vehicle2 }, CAR_COLORS[P2_COLOR].hex, true));
     const used = new Set(this.players.map((p) => p.colorIdx));
     const others = CAR_COLORS.map((_, i) => i).filter((i) => !used.has(i));
     // 每場換一組 AI 種子(第 N 場):再來一場時車道偏好/完美起跑不會一模一樣;同一個 RacingGame 的第一場仍固定(測試可重現)
     this.raceNo = (this.raceNo || 0) + 1;
     const ais = [];
+    const vOff = Math.floor(mulberry(1000 + this.raceNo * 7919)() * VEHICLE_IDS.length);   // v4 AI 混搭:每場隨機起點輪流拿(使用者拍板 Mario Kart 式)
     for (let i = 0; i < next.aiCount; i++) {
       const ci = others[i % others.length];
-      const ai = this._spawnCar({ name: AI_NAMES[i % AI_NAMES.length], colorIdx: ci }, CAR_COLORS[ci].hex, false);
+      const ai = this._spawnCar({ name: AI_NAMES[i % AI_NAMES.length], colorIdx: ci, vehicle: aiVehicleFor(i, vOff) }, CAR_COLORS[ci].hex, false);
       this.brains.set(ai, makeAiBrain(0.137 + i * 0.311 + ((this.raceNo - 1) % 97) * 0.0071, cfg));
       ais.push(ai);
     }
@@ -819,6 +840,7 @@ export class RacingGame {
     const ranked = this.rankedCars();
     const rows = ranked.map((c, i) => ({
       rank: i + 1, name: c.name, isPlayer: !!c.isPlayer, playerIdx: c.isPlayer ? c.playerIdx : -1, colorHex: CAR_COLORS[c.colorIdx].hex,
+      vehicle: c.vehicle, vehicleEmoji: (VEHICLES[c.vehicle] || VEHICLES.car).emoji,
       time: c.finished ? c.finishTime : null, progress: c.progress, bestLap: c.bestLap || null,
     }));
     const medalOf = (rank) => rank === 1 ? "🥇" : rank === 2 ? "🥈" : rank === 3 ? "🥉" : "🏁";
@@ -865,7 +887,8 @@ export class RacingGame {
     rig.group.rotation.y = car.heading;
     // 俯仰/側傾(坡度 + 加減速點頭 + 轉彎外傾),lerp 到目標
     const pitchT = car.slopePitch + clamp(-car.accel * 0.012, -0.07, 0.07);
-    const rollT = clamp(car.yawRate * car.speed * 0.006 + car.latAcc * 0.004, -0.14, 0.14);
+    // 賽車=外傾(車身側傾);摩托車=內傾(騎士壓車):右轉 yawRate<0 ⇒ rotation.z>0 = 頂往右倒
+    const rollT = rig.leanIn ? clamp(-car.yawRate * car.speed * 0.02, -0.45, 0.45) : clamp(car.yawRate * car.speed * 0.006 + car.latAcc * 0.004, -0.14, 0.14);
     const k = dt > 0 ? Math.min(1, dt * 7) : 1;
     rig.tilt.rotation.x += (pitchT - rig.tilt.rotation.x) * k;
     rig.tilt.rotation.z += (rollT - rig.tilt.rotation.z) * k;
@@ -874,15 +897,18 @@ export class RacingGame {
       w.spin.rotation.x = car.wheelSpin;
       if (w.front) w.pivot.rotation.y = -car.steer * 0.5;
     }
-    rig.flame.visible = !!car.boosting;
+    if (rig.flame) rig.flame.visible = !!car.boosting;
     const braking = car.isPlayer ? ((car.playerIdx === 1 ? this.input2 : this.input).brake > 0 && this.phase === "racing") : car.accel < -4;
-    rig.tailMat.emissiveIntensity = braking ? 1.0 : 0.35;
+    if (rig.tailMat) rig.tailMat.emissiveIntensity = braking ? 1.0 : 0.35;
+    if (rig.anim) rig.anim(car, dt);                                        // v4:馬的奔跑循環
     if (rig.cockpit) {
-      const { wheel, needlePivot } = rig.cockpit.userData;
-      wheel.rotation.z = car.steer * 1.7;    // +右=順時鐘(對駕駛而言);見 _makeCarRig 註解
-      const cfg = DIFFICULTY[this.settings.difficulty] || DIFFICULTY.easy;
-      const frac = clamp(Math.abs(car.speed) / (cfg.maxSpeed * CAR.boostSpeedMul), 0, 1);
-      needlePivot.rotation.z = (330 + frac * 240) * Math.PI / 180;
+      const { wheel, wheelAxis = "z", wheelGain = 1.7, needlePivot } = rig.cockpit.userData;
+      if (wheel) wheel.rotation[wheelAxis] = car.steer * wheelGain;    // 賽車方向盤 z(+右=順時鐘);馬韁 y;摩托車把手在前叉(wheelGain 0)
+      if (needlePivot) {
+        const cfg = DIFFICULTY[this.settings.difficulty] || DIFFICULTY.easy;
+        const frac = clamp(Math.abs(car.speed) / (cfg.maxSpeed * CAR.boostSpeedMul), 0, 1);
+        needlePivot.rotation.z = (330 + frac * 240) * Math.PI / 180;
+      }
     }
     // 駕駛座視角:藏車艙/窗/駕駛頭(只對人類車、且他自己的視窗選駕駛座);其他車照常。雙人渲染時 render() 每一刀再覆寫。
     const cockpitNow = car.isPlayer && this.phase !== "menu" && !!this.cams[car.playerIdx] && this.cams[car.playerIdx].view === "cockpit";
@@ -933,6 +959,7 @@ export class RacingGame {
       return;
     }
     const rig = this.rigs.get(car);
+    const VEH = VEHICLES[car.vehicle] || VEHICLES.car;                      // v4:各載具的車頭/駕駛座眼位
     const f = forwardOf(car.heading);
     const speedFrac = clamp(Math.abs(car.speed) / 44, 0, 1.2);   // 0906 極速提高:基準 34→44(標準檔極速)
     const pump = this.reducedMotion ? 0 : speedFrac;
@@ -949,7 +976,7 @@ export class RacingGame {
       d.fov = 62 + pump * 8; d.kPos = 1; d.kLook = 1;
     } else if (view === "hood") {
       rig.tilt.updateWorldMatrix(true, false);
-      this._v1.set(0, 0.92, 1.6).applyMatrix4(rig.tilt.matrixWorld);           // 引擎蓋前緣上方 9cm
+      this._v1.set(VEH.hood.x, VEH.hood.y, VEH.hood.z).applyMatrix4(rig.tilt.matrixWorld);   // 賽車=引擎蓋前緣上方 9cm;摩托車=前叉上;馬=鬐甲前
       this._v2.set(0, 0, 1).transformDirection(rig.tilt.matrixWorld);
       d.pos.copy(this._v1);
       d.look.copy(this._v1).addScaledVector(this._v2, 30); d.look.y -= 0.15;
@@ -959,7 +986,7 @@ export class RacingGame {
       // 世界旋轉 = Ry(heading)·Rx(pitch)·Rz(roll) ⇒ Euler order "YXZ"
       this._e.set(rig.tilt.rotation.x * 0.7, car.heading, rig.tilt.rotation.z * 0.4, "YXZ");
       this._q.setFromEuler(this._e);
-      this._v1.set(0.4, 1.27, -0.1).applyQuaternion(this._q).add(rig.group.position);   // 駕駛眼位(左座)
+      this._v1.set(VEH.eye.x, VEH.eye.y, VEH.eye.z).applyQuaternion(this._q).add(rig.group.position);   // 駕駛眼位(賽車左座 / 摩托車騎士 / 馬上騎士)
       this._v2.set(0, 0, 1).applyQuaternion(this._q);
       this._v3.set(0, 1, 0).applyQuaternion(this._q);
       // 轉彎時眼睛稍微往彎內看(右轉=heading 遞減=繞 up 轉 −φ)
@@ -1036,6 +1063,7 @@ export class RacingGame {
       lapT: p.finished ? (p.lapTimes[p.lapTimes.length - 1] || 0) : Math.max(0, this.raceT - p.lapStartT), bestLap: p.bestLap,
       wrongWay: !!p.wrongWay, offTrack: !!p.offTrack,
       camView: this.cams[1].view, camLabel: CAM_LABELS[this.cams[1].view], activeView: this.activeView(1),
+      vehicle: p.vehicle,
     };
   }
 
@@ -1046,6 +1074,7 @@ export class RacingGame {
     const rank = p ? ranked.indexOf(p) + 1 : 1;
     return {
       phase: this.phase, mode: this.settings.mode, two: this.is2P(), paused: this.paused,
+      vehicle: p ? p.vehicle : this.settings.vehicle,
       assist: this.assistStrength(),
       p2: this._hudP2(ranked),
       countdown: this.phase === "countdown" ? Math.ceil(this.countdownT) : 0,

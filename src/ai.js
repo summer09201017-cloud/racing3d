@@ -55,7 +55,8 @@ export function aiInput(car, brain, track, cfg, dt, cars = [], player = null) {
 
   // 速度目標:彎前煞車 v = sqrt(latAcc / k),看前方 12 + v*1.1 m
   const kmax = maxCurvatureAhead(track, car.trackDist, 12 + Math.abs(car.speed) * 1.1);
-  const vCorner = kmax > 1e-4 ? Math.sqrt(cfg.aiLatAcc / kmax) : Infinity;
+  const latAcc = cfg.aiLatAcc * ((car.params && car.params.gripMul) || 1);   // v4:馬抓地好彎速高、摩托車反之
+  const vCorner = kmax > 1e-4 ? Math.sqrt(latAcc / kmax) : Infinity;
   let target = Math.min(cfg.aiMax * brain.skillMul, vCorner);
   // 溫柔橡皮筋:領先玩家 >70m 稍微收、落後 >70m 稍微放(永不無限快)
   if (player && player !== car && !player.finished) {
