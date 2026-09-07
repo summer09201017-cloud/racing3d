@@ -34,13 +34,19 @@ const mk = (vehicle, trk, dist, lat) => { const car = createCar({ vehicle, param
   ok(pc.accelMul === 1 && pc.gripMul === 1, "賽車倍率 1");
   const pm = vehicleParams("moto"), ph = vehicleParams("horse");
   ok(pm.turnRate > pc.turnRate && pm.gripMul < 1 && pm.width < pc.width && pm.grassSpeedMul < pc.grassSpeedMul && pm.accelMul > 1, "摩托車:轉快 / 抓地差 / 窄 / 草地更慢 / 起步快(零和)");
-  ok(ph.grassSpeedMul === 1 && ph.grassDrag === 0 && ph.gripMul > 1 && ph.accelMul < 1 && ph.turboBurn > pc.turboBurn, "馬:草地不減速 / 抓地好 / 起步慢 / 衝刺耗快(零和)");
+  ok(ph.grassSpeedMul === 1 && ph.grassDrag === 0 && ph.cornerGrip > 1 && ph.accelMul < 1 && ph.turboBurn > pc.turboBurn, "馬:草地不減速 / 彎道穩 / 起步慢 / 衝刺耗快(零和)");
+  ok(ph.gripMul <= 1, "★ 馬的全域抓地不高於賽車:它的價值是草地零減速(真人能切內側),不是全域最強——全域抓地高會讓它三條賽道都第一,那就成了正確答案而不是選擇");
   const pv = vehicleParams("hover");
   ok(pv.grassSpeedMul === 1 && pv.grassDrag === 0 && pv.slipGain > pc.slipGain && pv.gripMul < pc.gripMul && pv.turnRate > pc.turnRate, "懸浮車:草地不減速 / 轉向靈活 / 但很會漂、抓地差(零和)");
+  ok(pv.straightAccel > 1.4 && pv.cornerGrip < 1, "懸浮車的主場是直線多的賽道(出彎回速最快、彎道最吃虧)");
   ok(pv.slipGain > pm.slipGain && pv.slipGain > pc.slipGain, "懸浮車比誰都會漂(難控感來自甩出去的量,不是抓地低——抓地太低只會單純變慢)");
   const pr = vehicleParams("run");
   ok(pr.turnRate > pm.turnRate && pr.width < pm.width && pr.grassSpeedMul === 1 && pr.grassDrag === 0, "跑步:轉最靈活、身體最窄、草地不減速");
   ok(pr.gripMul <= ph.gripMul, "跑步抓地不比馬好(三個優點疊起來太強,要用抓地付回去:grip 1.2 時它 43.3s 比誰都快)");
+  ok(pr.cornerGrip > 1.3 && pr.straightAccel < 1, "跑步是彎道型:彎道加成最大、直線吃虧");
+  ok(pm.cornerGrip > 1.3 && pm.straightAccel < 1, "摩托車也是彎道型");
+  const pcc = vehicleParams("car");
+  ok(pcc.straightAccel === 1 && pcc.cornerGrip === 1, "賽車是基準:兩個地形加成都是 1");
   ok(pr.accelMul < 1 && pr.turboBurn > pc.turboBurn * 1.4, "跑步的代價:起步慢、衝刺很快沒力(零和)");
   ok(vehicleParams("nope").turnRate === CAR.turnRate, "亂值回賽車");
   const set = new Set([0, 1, 2, 3, 4].map((i) => aiVehicleFor(i, 2)));
@@ -96,6 +102,33 @@ const mk = (vehicle, trk, dist, lat) => { const car = createCar({ vehicle, param
   console.log(`  (③ 零和:${Object.entries(times).map(([k, v]) => `${k} ${v.toFixed(1)}s`).join(" / ")},差 ${((spread - 1) * 100).toFixed(1)}%)`);
 }
 
+// ③b 地形適性(0907 使用者拍板「每型給一個主場,不做絕對強弱」):
+//   三條賽道的冠軍**不可以都是同一型**,而且不可以有任何一型三條全墊底 —— 那就是「有正確答案」,選單失去意義。
+{
+  const TR = ["meadow", "desert", "snow"];
+  const rows = {};
+  for (const v of VEHICLE_IDS) {
+    rows[v] = {};
+    for (const tr of TR) {
+      const g = new RacingGame({ headless: true }); g.autopilot = true;
+      g.startRace({ trackId: tr, laps: 1, aiCount: 0, difficulty: "normal", vehicle: v, items: false });
+      let t = 0; while (g.phase !== "finished" && t < 400) { g.update(DT); t += DT; }
+      ok(g.phase === "finished", `${v} 在 ${tr} 跑得完`);
+      rows[v][tr] = g.results.time;
+    }
+  }
+  const win = {}, lose = {};
+  for (const tr of TR) {
+    const sorted = VEHICLE_IDS.slice().sort((a, b) => rows[a][tr] - rows[b][tr]);
+    win[tr] = sorted[0]; lose[tr] = sorted[sorted.length - 1];
+    const ts = VEHICLE_IDS.map((v) => rows[v][tr]);
+    ok(Math.max(...ts) / Math.min(...ts) <= 1.10, `${tr} 同賽道內五型差 ${((Math.max(...ts) / Math.min(...ts) - 1) * 100).toFixed(1)}% ≤ 10%`);
+  }
+  ok(new Set(Object.values(win)).size >= 2, `★ 冠軍不是固定同一型(${TR.map((tr) => tr + "=" + win[tr]).join(" / ")})`);
+  for (const v of VEHICLE_IDS) ok(TR.filter((tr) => lose[tr] === v).length < 3, `${v} 不是三條賽道全墊底(選這型的孩子不會注定吊車尾)`);
+  ok(win.desert === "hover", `★ 懸浮車的主場是沙漠(直線佔 51%):${rows.hover.desert.toFixed(1)}s 拿第一`);
+  console.log(`  (③b 各賽道冠軍:${TR.map((tr) => tr + "=" + win[tr] + " " + rows[win[tr]][tr].toFixed(1) + "s").join(" / ")})`);
+}
 // ④ 遊戲層
 {
   const g = new RacingGame({ headless: true });

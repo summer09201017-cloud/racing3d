@@ -3,41 +3,50 @@
 // 載具 = 參數包(over)+ 3D 外型(rig)+ 音色(sound)+ 駕駛座眼位(eye/hood)。物理仍是同一支 stepCar:car.params = vehicleParams(id)。
 import { CAR } from "./vehicle.js";
 
+/* ★ 地形適性(v9,0907 使用者拍板):每型有一個「主場」,不是誰絕對快。
+   straightAccel = 直線段的加速倍率、cornerGrip = 彎道段的抓地倍率(都不碰極速)。
+   三條賽道的性格:沙漠直線佔 51%、草原 20%、雪山只有 16%(彎最多)。 */
+
 export const VEHICLES = {
   car: {
     id: "car", label: "賽車", emoji: "🏎️", rig: "car", sound: "engine", boostLabel: "渦輪", leanIn: false,
-    blurb: "均衡:什麼都中等,最好上手。",
-    over: {},
+    blurb: "均衡:哪一條賽道都不吃虧,最好上手(雪山那種連續彎最能發揮)。",
+    over: { straightAccel: 1.0, cornerGrip: 1.0 },   // 基準:所有加成都是 1(vehicleParams("car") 仍逐鍵 == CAR + 兩個 1)
     eye: { x: 0.4, y: 1.38, z: -0.1 }, hood: { x: 0, y: 0.92, z: 1.6 },   // 0907 使用者實玩「擋住視線」⇒ 眼位 1.27→1.38(往上,不往前;前移會讓後視鏡與頂梁變大,見 CLAUDE.md 地雷 4)
   },
   moto: {
     id: "moto", label: "摩托車", emoji: "🏍️", rig: "moto", sound: "moto", boostLabel: "渦輪", leanIn: true,
-    blurb: "轉得快、車身窄好鑽、起步快;但抓地差會滑、開到草地更慢、撞牆掉更多速。",
+    blurb: "彎道之王(草原是它的主場):轉得快、車身窄好鑽;但直線衝不贏、草地更慢、撞牆掉更多速。",
     // 0907 掃過 8 組:grip 0.9 / accel 1.15 ⇒ 草原自動駕駛 46.1s vs 賽車 45.4s(+1.4%),沙漠 +1.6%、雪山 +2.2%(vehicles.test ③ 守 ≤10%)
-    over: { turnRate: CAR.turnRate * 1.25, gripMul: 0.9, accelMul: 1.15, width: 0.9, length: 2.3, grassSpeedMul: 0.5, wallBounce: 0.5, slipGain: CAR.slipGain * 1.1, wheelRadius: 0.34 },
+    over: { turnRate: CAR.turnRate * 1.25, gripMul: 0.96, accelMul: 1.15, width: 0.9, length: 2.3, grassSpeedMul: 0.5, wallBounce: 0.5, slipGain: CAR.slipGain * 1.1, wheelRadius: 0.34,
+      straightAccel: 0.88, cornerGrip: 1.42 },   // 主場=彎多的地形(草原奪冠)
     eye: { x: 0, y: 1.46, z: -0.15 }, hood: { x: 0, y: 0.85, z: 0.95 },
   },
   horse: {
     id: "horse", label: "馬", emoji: "🐎", rig: "horse", sound: "hooves", boostLabel: "衝刺", leanIn: false,
-    blurb: "草地不減速(可以切內側)、抓地好不會滑;但起步慢、衝刺體力耗得快。",
+    blurb: "草地完全不減速——可以放膽切內側抄近路;彎道也穩;但起步慢、衝刺體力耗得快。",
     // 0907 掃過 8 組:grip 1.08 / accel 0.88 ⇒ 草原 44.6s vs 賽車 45.4s(−1.8%),沙漠 −0.7%、雪山 −1.7%;grip 1.15 會快到 −4%
-    over: { turnRate: CAR.turnRate * 1.1, gripMul: 1.08, accelMul: 0.88, width: 1.2, length: 2.9, grassSpeedMul: 1.0, grassDrag: 0, turboBurn: CAR.turboBurn * 1.35, turboRegen: CAR.turboRegen * 0.85, wallBounce: 0.6, wheelRadius: 1.0 },
+    over: { turnRate: CAR.turnRate * 1.1, gripMul: 1.0, accelMul: 0.88, width: 1.2, length: 2.9, grassSpeedMul: 1.0, grassDrag: 0, turboBurn: CAR.turboBurn * 1.35, turboRegen: CAR.turboRegen * 0.85, wallBounce: 0.6, wheelRadius: 1.0,
+      straightAccel: 0.97, cornerGrip: 1.1 },   // ★ 抓地從 1.08 降到 1.0:馬的價值是**草地零減速**(真人可以切內側),不是全域抓地——
+    // 全域抓地高會讓它三條賽道都第一,那就成了「正確答案」而不是選擇(0907 掃出來的)
     eye: { x: 0, y: 2.98, z: -0.1 }, hood: { x: 0, y: 2.05, z: 1.55 },   // 眼位比騎士頭再高 25cm(0907 截圖:2.74 時馬頭正好擋在畫面中央)
   },
   run: {
     id: "run", label: "跑步", emoji: "🏃", rig: "run", sound: "steps", boostLabel: "衝刺", leanIn: false,
-    blurb: "用兩條腿跑:轉彎最靈活、草地完全不減速、身體最窄鑽得過;但起步慢、衝刺很快沒力。",
+    blurb: "用兩條腿跑:彎道最靈活、草地完全不減速、身體最窄鑽得過;但直線與起步都慢、衝刺很快沒力。",
     // 0907 掃 6 組:grip 1.0 / accel 0.85 ⇒ 草原 45.9s,五型差 3.5%。
     // ★ 原本 grip 1.2 讓它 43.3s 比誰都快 —— 轉最靈活 + 草地不減速 + 最窄三個優點疊起來太強,要用抓地與起步付回去。
-    over: { turnRate: CAR.turnRate * 1.32, gripMul: 1.0, accelMul: 0.85, width: 0.7, length: 1.1, grassSpeedMul: 1.0, grassDrag: 0, turboBurn: CAR.turboBurn * 1.5, turboRegen: CAR.turboRegen * 0.8, wallBounce: 0.7, wheelRadius: 0.9 },
+    over: { turnRate: CAR.turnRate * 1.32, gripMul: 1.0, accelMul: 0.85, width: 0.7, length: 1.1, grassSpeedMul: 1.0, grassDrag: 0, turboBurn: CAR.turboBurn * 1.5, turboRegen: CAR.turboRegen * 0.8, wallBounce: 0.7, wheelRadius: 0.9,
+      straightAccel: 0.95, cornerGrip: 1.45 },   // 彎道最強(靠靈活),直線吃虧
     eye: { x: 0, y: 1.62, z: 0.12 }, hood: { x: 0, y: 1.2, z: 0.8 },
   },
   hover: {
     id: "hover", label: "懸浮車", emoji: "🛸", rig: "hover", sound: "hover", boostLabel: "推進器", leanIn: false,
-    blurb: "浮在地面上:草地完全不減速(想切哪就切哪)、轉向靈活;但很會漂,要提早修方向。",
+    blurb: "浮在地面上:直線與出彎衝得最快(沙漠是它的主場)、草地完全不減速;但彎道最吃虧,而且很會漂。",
     // 0907 掃 9 組:grip 0.92 / accel 1.02 ⇒ 草原 46.2s,四型差 8.7%→**3.5%**。
     // ★ 難控感由 slipGain ×1.45(甩得多)負責,不是靠抓地低——抓地太低只會讓它單純變慢、失去「浮起來滑順」的味道。
-    over: { turnRate: CAR.turnRate * 1.18, gripMul: 0.92, accelMul: 1.02, width: 1.8, length: 3.4, grassSpeedMul: 1.0, grassDrag: 0, slipGain: CAR.slipGain * 1.45, wallBounce: 0.66, wheelRadius: 0.001 },
+    over: { turnRate: CAR.turnRate * 1.18, gripMul: 0.92, accelMul: 1.02, width: 1.8, length: 3.4, grassSpeedMul: 1.0, grassDrag: 0, slipGain: CAR.slipGain * 1.45, wallBounce: 0.66, wheelRadius: 0.001,
+      straightAccel: 1.85, cornerGrip: 0.86 },   // ★ 主場=沙漠(直線佔 51%):出彎回速最快,但彎道最吃虧
     eye: { x: 0, y: 1.34, z: 0.05 }, hood: { x: 0, y: 1.0, z: 1.5 },
   },
 };

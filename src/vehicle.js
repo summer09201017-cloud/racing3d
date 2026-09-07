@@ -52,6 +52,18 @@ export const ASSIST = { dead: 0.45, kP: 2.2, kD: 0.9 };
    maxHold 累積上限(對應最長獎勵)
    secPer  每一點換幾秒渦輪 */
 export const DRIFT = { minLat: 2.2, perUnit: 0.34, need: 1, maxHold: 3.2, secPer: 0.42 };
+
+/* 地形適性(v9,0907 使用者拍板「每型給一個主場」):依**當下路段的曲率**給加成,**不動極速**。
+   ★ 為什麼不做絕對強弱:兩個孩子同機,一個選最強一個選最弱,開賽就決定勝負 ⇒ 選單不是選擇,是正確答案。
+   直線段(|k| < straightK)乘 straightAccel 在加速上;彎道段(|k| > cornerK)乘 cornerGrip 在抓地上。 */
+export const TERRAIN = { straightK: 0.004, cornerK: 0.010 };
+/** 這一幀車子踩在哪種路段:"straight" / "corner" / "mid"(純函數,測試直接驗)。 */
+export function segmentOf(k) {
+  const a = Math.abs(k || 0);
+  if (a < TERRAIN.straightK) return "straight";
+  if (a > TERRAIN.cornerK) return "corner";
+  return "mid";
+}
 /** 累積量 → 獎勵秒數(0 = 不給)。純函數,測試直接驗。 */
 export function driftReward(charge) {
   if (!(charge >= DRIFT.need)) return 0;
@@ -100,7 +112,8 @@ export function createCar({ x = 0, z = 0, heading = 0, y = 0, name = "車手", i
     trackIdx: -1, trackDist: 0, lateral: 0, latRate: 0, progress: 0, lap: 0,
     offTrack: false, wrongWay: false, wrongT: 0, stuckT: 0, bumpT: 0,
     oilT: 0, stars: 0, pickedIds: null,
-    drift: 0, driftPeak: 0,   // v8 甩尾計量:目前累積 / 這次甩尾的最高累積(給 HUD 與播報)   // v5 道具層:油漬剩餘秒數 / 撿到的星星 / 這一圈撿過的道具 id
+    drift: 0, driftPeak: 0,
+    curK: 0,   // v9 地形適性:上一幀所在路段的曲率(第一幀當直線)   // v8 甩尾計量:目前累積 / 這次甩尾的最高累積(給 HUD 與播報)   // v5 道具層:油漬剩餘秒數 / 撿到的星星 / 這一圈撿過的道具 id
     finished: false, finishTime: 0, lapTimes: [], lapStartT: 0, bestLap: 0,
     slopePitch: 0,
     wheelSpin: 0,
@@ -127,7 +140,13 @@ export function stepCar(car, input, dt, cfg, track, opts = {}) {
   if (dt <= 0) return events;
   const L = track.length;
   const P = car.params || CAR;                        // v4 載具參數包(沒給=賽車基底;vehicles.js)
-  const accelMul = P.accelMul ?? 1, gripMul = P.gripMul ?? 1;
+  // v9 地形適性:依上一幀所在路段給加成(不動極速——極速永遠由難度管)
+  const seg = segmentOf(car.curK);
+  // ★ 「不在彎道時」都給加成(不只純直線):車在直線上早就到極速了,加速加成在那裡沒作用;
+  //   真正的差距在**出彎回速**,而那是 mid 段(0907 掃參數掃出來的)。
+  const terrAccel = seg === "corner" ? 1 : (P.straightAccel ?? 1);
+  const terrGrip = seg === "corner" ? (P.cornerGrip ?? 1) : 1;
+  const accelMul = (P.accelMul ?? 1) * terrAccel, gripMul = (P.gripMul ?? 1) * terrGrip;
 
   // ── 轉向平滑 + AI 輕扶回中(離中線太遠時輕輕拉回;玩家自己在打方向就少介入)
   let steerTarget = clamp(input.steer || 0, -1, 1);
@@ -222,6 +241,7 @@ export function stepCar(car, input, dt, cfg, track, opts = {}) {
   let delta = n.dist - car.trackDist;
   if (delta > L / 2) delta -= L; else if (delta < -L / 2) delta += L;
   car.latRate = (n.lateral - car.lateral) / dt;                      // 橫向漂移速度(給輔助的 D 項)
+  car.curK = n.k;                                                    // v9 地形適性:記下這一幀的路段曲率,下一幀用
   car.trackIdx = n.idx; car.trackDist = n.dist; car.lateral = n.lateral;
   car.progress += delta;
   car.y = n.y;
